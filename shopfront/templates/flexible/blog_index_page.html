@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+
+{% load wagtailcore_tags wagtailimages_tags %}
+
+{% block content %}
+    <div class="w-full px-12 pt-12 pb-2 bg-primary-900 border-b border-primary-700">
+        <div class="container">
+            <h1 class="text-primary-50 text-5xl font-bold mb-4">{{ self.title }}</h1>
+            <h2 class="text-primary-200 text-2xl">{{ self.subtitle }}</h2>
+        </div>
+    </div>
+    <section class="w-full bg-primary-900 py-1 px-8">
+        <div class="container">
+
+            <div class="flex">
+                {% for post in posts %}
+                <a href="{{ post.url }}" class="m-4 bg-white w-52 rounded-md p-0">
+                    {% image post.banner fill-208x208 as img %}
+                    <img class="rounded-t-md" src="{{ img.url }}" alt="{{ img.alt }}">
+                    <div class="py-1 px-4">
+                        <h3 class="text-grey-900 font-bold leading-5">{{ post.title }}</h3>
+                        <p class="text-grey-600 py-2 text-sm">{{ post.brief }}</p>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+{% endblock %}

@@ -1,0 +1,43 @@
+{% load wagtailimages_tags %}
+
+<div class="w-full md:w-1/2 lg:w-1/3 mb-12 px-4">
+  <div class="px-6" itemprop="employee" itemscope itemtype="https://schema.org/Person">
+
+    {% image self.photo fill-120x120 as img %}
+    <img alt="Staff photograph" src="{{ img.url }}"
+      class="shadow-lg rounded-full max-w-full mx-auto" style="max-width: 120px;"
+    />
+
+    <div class="pt-2 text-center">
+      <h5 itemprop="name" class="text-lg font-bold">{{ self.name }}</h5>
+      <p itemprop="jobTitle" class="mt-1 text-sm text-grey-500 uppercase">
+        {{ self.job_title }}
+      </p>
+
+      <p class="mt-1 text-sm text-grey-800">
+        {% if self.short_bio %}
+          {{ self.short_bio }}
+        {% endif %}
+      </p>
+
+      <div class="mt-2">
+        {% if self.whatsapp %}
+        <a itemprop="telephone" class="text-grey-500 p-2" href="https://wa.me/{{ self.whatsapp }}?text=I'm%20interested%20in%20your%20products" target="_blank"><i class="fab fa-whatsapp"></i></a>
+        {% endif %}
+
+        {% if self.email %}
+        <a itemprop="email" class="text-grey-500 p-2" href="mailto:{{ self.email }}"><i class="fas fa-envelope"></i></a>
+        {% endif %}
+
+        {% if self.phone %}
+        <a itemprop="telephone" class="text-grey-500 p-2" href="tel:{{ self.phone }}"><i class="fas fa-phone-alt"></i></a>
+        {% endif %}
+
+        {% if self.linkedin %}
+        <a itemprop="url" class="text-grey-500 p-2" href="{{ self.linkedin }}" target="_blank"><i class="fab fa-linkedin"></i></a>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>

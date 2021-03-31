@@ -1,0 +1,7 @@
+#hamburger:checked + #mainmenu {
+    display: block;
+}
+
+.navlink {
+    @apply lg:p-4 py-3 px-0;
+}

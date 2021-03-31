@@ -1,0 +1,3 @@
+hr {
+    @apply border-none bg-primary-500 h-px m-auto;
+}

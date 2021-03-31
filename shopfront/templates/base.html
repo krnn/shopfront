@@ -1,0 +1,113 @@
+{% load static wagtailuserbar %}
+
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>
+        {% block title %}
+        {% if self.seo_page_title %}{{ self.seo_page_title }}{% else %}{{ self.title }}{% endif %}
+        {% endblock %}
+        {% block title_suffix %}
+        {% with self.get_site.site_name as site_name %}
+        {% if site_name %}- {{ site_name }}{% endif %}
+        {% endwith %}
+        {% endblock %}
+    </title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    {# Global stylesheets #}
+    <link rel="stylesheet" href="https://bulma.io/vendor/fontawesome-free-5.15.2-web/css/all.min.css"/>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/shopfront.css' %}">
+
+    {% block extra_css %}
+    {# Override this in templates to add extra stylesheets #}
+    {% endblock %}
+</head>
+
+<body class="{% block body_class %}{% endblock %} antialiased bg-grey-50">
+    {% wagtailuserbar %}
+
+    <!-- HEADER -->
+    <header class="z-50	lg:px-16 px-6 py-1 bg-white fixed w-screen" role="navigation" aria-label="main navigation">
+        <nav class="flex flex-wrap items-center justify-between w-full">
+            <a class="navbar-item" href="">
+                <img src="https://bulma.io/images/bulma-logo.png" class="h-12" />
+            </a>
+            <label for="hamburger" class="cursor-pointer md:hidden block">
+                <img src="https://cdn2.iconfinder.com/data/icons/4web-3/139/menu-512.png" alt="main menu" width="40">
+            </label>
+            <input type="checkbox" name="hamburger" class="hidden" id="hamburger">
+            <div id="mainmenu" class="hidden md:flex justify-between md:items-center md:w-2/3 lg:w-3/4 xl:w-5/6 w-screen">
+                <ul class="flex flex-col md:flex-row md:h-auto h-fit-90 items-center justify-evenly md:w-3/4 lg:w-auto text-base text-grey-800">
+                    <li><a href="#" class="navlink">Products</a></li>
+                    <li><a href="#" class="navlink">Services</a></li>
+                    <li><a href="#" class="navlink">Store</a></li>
+                    <li><a href="#" class="navlink">About Us</a></li>
+                    <li><a href="#" class="navlink">Contact</a></li>
+                </ul>
+
+                <div class="text-center mb-5 md:m-0">
+                    <span>Login</span>
+                    <span>Sign up</span>
+                </div>
+            </div>
+        </nav>
+        <div>
+        </div>
+
+    </header>
+
+    <!-- CONTENT BLOCK -->
+    <main class="pt-14">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <div class="mx-auto inline-block text-center">
+            <p class="text-sm text-grey-500">Social Media Links</p>
+            <hr>
+            <div >
+                {% if settings.site_settings.SocialMediaSettings.linkedin %}
+                <a href="{{ settings.site_settings.SocialMediaSettings.linkedin }}">
+                    <i class="fab fa-linkedin my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                </a>
+                {% endif %}
+                
+                {% if settings.site_settings.SocialMediaSettings.youtube %}
+                <a href="{{ settings.site_settings.SocialMediaSettings.youtube }}">
+                    <i class="fab fa-youtube my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                </a>
+                {% endif %}
+                
+                {% if settings.site_settings.SocialMediaSettings.facebook %}
+                <a href="{{ settings.site_settings.SocialMediaSettings.facebook }}">
+                    <i class="fab fa-facebook my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                </a>
+                {% endif %}
+                
+                {% if settings.site_settings.SocialMediaSettings.instagram %}
+                <a href="{{ settings.site_settings.SocialMediaSettings.instagram }}">
+                    <i class="fab fa-instagram my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                </a>
+                {% endif %}
+                
+                {% if settings.site_settings.SocialMediaSettings.twitter %}
+                <a href="{{ settings.site_settings.SocialMediaSettings.twitter }}">
+                    <i class="fab fa-twitter my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </footer>
+    {# Global javascript #}
+    <script type="text/javascript" src="{% static 'js/shopfront.js' %}"></script>
+
+    {% block extra_js %}
+    {# Override this in templates to add extra javascript #}
+    {% endblock %}
+</body>
+
+</html>

@@ -1,0 +1,10 @@
+{% load wagtailimages_tags %}
+
+<div class="w-full">
+{% for img in self.images %}
+    <div>
+        {% image img width-1200 as i %}
+        <img src="{{ i.url }}" alt="{{ i.alt }}" class="w-full">
+    </div>
+{% endfor %}
+</div>

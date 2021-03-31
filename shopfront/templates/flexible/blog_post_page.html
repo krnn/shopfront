@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+
+{% load wagtailcore_tags wagtailimages_tags %}
+
+{% block content %}
+<div class="container bg-white">
+
+    <article class="text-block mx-auto">
+        <h1 class="text-4xl text-grey-900 font-bold">{{ self.title }}</h1>
+        <p class="text-grey-600 text-sm">Last edited {{ self.date|date:"j F, Y" }}</p>
+        {% image self.banner width-896 as img %}
+        <img class="w-full" src="{{ img.url }}" alt="{{ img.alt }}">
+        <p class="text-2xl text-grey-600">{{ self.brief }}</p>
+        
+        {% include_block page.content %}
+            
+    </article>
+</div>
+
+
+
+{% endblock %}

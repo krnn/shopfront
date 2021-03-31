@@ -1,0 +1,37 @@
+{% load wagtailcore_tags wagtailimages_tags %}
+
+<div class="w-screen">
+    <div class="container mx-auto">
+        <div class="flex flex-wrap sm:flex-nowrap justify-center py-12">
+            {% for feature in self.feature %}
+
+                <article class="text-block text-{{ self.text_align }}">
+                    {% if feature.icon %}
+                    {% image feature.icon height-50 as icon %}
+                    <img src="{{ icon.url }}" width="{{ feature.icon_size }}" alt="{{ icon.alt }}" class="inline-block mb-6">
+                    {% endif %}
+
+                    <{{ feature.heading.level }} class="text-{{ feature.heading.colour }} mb-{{ feature.heading.space }}
+                    {% if feature.heading.divider %} font-bold {% endif %}">
+                    {{ feature.heading.text }}
+                    </{{ feature.heading.level }}>
+                    <div class="leading-{{ feature.text_content.leading }} font-{{ feature.text_content.colour }}">
+                        {{ feature.text_content.text|richtext }}
+                        
+                        {% if feature.link %}
+                        <a href="{{ feature.link }}" class="btn">
+                            {% if feature.button_text %} {{ feature.button_text }}
+                            {% else %} Read More {% endif %}
+                        </a>
+                    </div>
+                    {% endif %}
+                </article>
+
+            {% endfor %}
+        </div>
+
+        {% if self.divider %}
+        <hr>
+        {% endif %}
+    </div>
+</div>

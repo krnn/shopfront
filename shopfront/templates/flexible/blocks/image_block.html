@@ -1,0 +1,9 @@
+{% load wagtailimages_tags %}
+
+{% image self.image width-1200 as img %}
+<figure class="block container mx-auto text-center">
+    <img class="w-full mx-auto" src="{{ img.url }}" alt="{{ self.description }}">
+    {% if self.show_caption %}
+    <figcaption class="text-center text-grey-600">{{ self.description }}</figcaption>
+    {% endif %}
+</figure>

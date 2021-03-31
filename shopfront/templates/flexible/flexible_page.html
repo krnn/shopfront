@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+
+{% load wagtailcore_tags wagtailimages_tags %}
+
+{% block content %}
+    {% for content in page.content %}
+        {% include_block content %}
+    {% endfor %}
+{% endblock %}

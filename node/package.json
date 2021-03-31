@@ -1,0 +1,21 @@
+{
+  "name": "node",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "css": "postcss ./css/tailwind.css -o ../shopfront/static/css/shopfront.css",
+    "build": "NODE_ENV=production postcss ./css/tailwind.css -o ../shopfront/static/css/shopfront.css"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "autoprefixer": "^10.2.5",
+    "postcss": "^8.2.8",
+    "postcss-cli": "^8.3.1",
+    "postcss-import": "^14.0.0",
+    "postcss-scss": "^3.0.5",
+    "tailwindcss": "^2.0.3"
+  }
+}

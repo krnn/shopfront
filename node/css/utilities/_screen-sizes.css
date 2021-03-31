@@ -1,0 +1,20 @@
+.h-fit {
+    height: calc(100vh - 3.5rem);
+}
+
+.h-fit-90 {
+    height: calc(90vh - 3.5rem);
+}
+
+.h-fit-80 {
+    height: calc(80vh - 3.5rem);
+}
+
+.h-hero {
+    height: calc(100vh - 3.5rem);
+}
+
+
+@media (min-width: 640px) {
+    .h-hero { max-height: 70vw; }
+}

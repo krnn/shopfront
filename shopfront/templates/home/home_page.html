@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% load wagtailcore_tags wagtailimages_tags %}
+
+{% block body_class %}template-homepage{% endblock %}
+
+{% block content %}
+
+{% image self.hero_image fill-1000x700 as heroimg %}
+<div class="flex flex-wrap h-hero bg-white">
+    <div class="flex flex-col justify-center w-full md:w-7/12 lg:w-5/12 container mx-auto px-4 md:pl-12 md:pb-14">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold text-grey-800">{{ self.hero_title }}</h1>
+        <h2 class="text-xl md:text-2xl mt-5 text-grey-900">{{ self.hero_subtitle|richtext }}</h1>
+        {% if self.hero_cta %}
+            <a href="#">@todo</a>
+        {% endif %}
+    </div>
+    <div class="w-full md:w-5/12 lg:w-7/12 bg-cover bg-center p-32"
+      style="background-image: url('{{ heroimg.url }}');"></div>
+</div>
+
+<section>
+    <div class="container">
+        <div class="carousel m-auto w-full overflow-hidden whitespace-nowrap h-52">
+            <div id="reel">
+                {% for loop in self.image_carousel.all %}
+                {% image loop.carousel_image fill-200x200 as img %}
+                <img class="inline m-3.5" src="{{ img.url }}" alt="{{ img.alt }}">
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .carousel {
+        height: 228px;
+        max-width: 690px;
+    }
+
+    #reel {
+        transition: margin-left ease-in 150ms;
+    }
+</style>
+{% endblock %}
+
+
+{% block extra_js %}
+<script>
+    let count = {{ self.image_carousel.all.count }};
+    const reel = document.getElementById('reel');
+    if (count > 3) {
+        let fSize = 231;
+        let leftward = false;
+        let moves = count - 3;
+        let i = 0;
+        
+        setInterval(() => {
+            if (i === 0 || i === moves) {leftward = !leftward}
+            console.log('moves=', moves, ", i = ", i);
+            if (leftward) i++
+            else i--
+            reel.style.marginLeft = (fSize * -i) + "px";
+        }, 3100);
+    }
+</script>
+{% endblock %}
