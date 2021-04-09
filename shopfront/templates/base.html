@@ -1,4 +1,4 @@
-{% load static wagtailuserbar %}
+{% load static wagtailuserbar menus_tags footer_tags %}
 
 <!DOCTYPE html>
 <html class="no-js" lang="en">
@@ -15,12 +15,15 @@
         {% endwith %}
         {% endblock %}
     </title>
-    <meta name="description" content="" />
+    <meta name="description" content="{% if self.brief %}{{ self.brief }}{% else %}{{ self.search_description }}{% endif %}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     {# Global stylesheets #}
-    <link rel="stylesheet" href="https://bulma.io/vendor/fontawesome-free-5.15.2-web/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" integrity="sha512-iBBXm8fW90+nuLcSKlbmrPcLa0OT92xO1BIsZ+ywDWZCvqsWgccV3gFoRBv0z+8dLJgyAHIhR35VZc2oM/gI1w==" crossorigin="anonymous" />
     <link rel="stylesheet" type="text/css" href="{% static 'css/shopfront.css' %}">
+
+    {% block extra_meta %}
+    {% endblock %}
 
     {% block extra_css %}
     {# Override this in templates to add extra stylesheets #}
@@ -30,10 +33,10 @@
 <body class="{% block body_class %}{% endblock %} antialiased bg-grey-50">
     {% wagtailuserbar %}
 
-    <!-- HEADER -->
+    
     <header class="z-50	lg:px-16 px-6 py-1 bg-white fixed w-screen" role="navigation" aria-label="main navigation">
         <nav class="flex flex-wrap items-center justify-between w-full">
-            <a class="navbar-item" href="">
+            <a class="navbar-item" href="/">
                 <img src="https://bulma.io/images/bulma-logo.png" class="h-12" />
             </a>
             <label for="hamburger" class="cursor-pointer md:hidden block">
@@ -41,12 +44,38 @@
             </label>
             <input type="checkbox" name="hamburger" class="hidden" id="hamburger">
             <div id="mainmenu" class="hidden md:flex justify-between md:items-center md:w-2/3 lg:w-3/4 xl:w-5/6 w-screen">
+                
+                {% get_menu "main" as navigation %}
                 <ul class="flex flex-col md:flex-row md:h-auto h-fit-90 items-center justify-evenly md:w-3/4 lg:w-auto text-base text-grey-800">
-                    <li><a href="#" class="navlink">Products</a></li>
-                    <li><a href="#" class="navlink">Services</a></li>
-                    <li><a href="#" class="navlink">Store</a></li>
-                    <li><a href="#" class="navlink">About Us</a></li>
-                    <li><a href="#" class="navlink">Contact</a></li>
+                    {% for item in navigation.menu_items.all %}
+                    <li class="relative group">
+                        <a href="{{ item.link_page.url }}{% if item.section %}{{ item.section }}{% endif %}" class="navlink">
+                        {{ item.title }}
+                        {% if item.submenus %} <i class="fas fa-angle-down"></i>{% endif %}
+                        </a>
+                        {% if item.submenus %}
+                        <div class="submenu invisible group-hover:visible">
+                            <div class="flex align-top">
+                                {% for sub_title in item.get_submenus %}
+                                {% get_menu sub_title as submenu %}
+                                <div>
+                                    <p class="text-lg font-bold">{{ submenu.title }}</p>
+                                    <ul>
+                                        {% for subitem in submenu.menu_items.all %}
+                                        <li class="text-grey-600 whitespace-nowrap hover:text-primary-700">
+                                            <a href="{{ subitem.link_page.url }}{% if item.section %}{{ item.section }}{% endif %}">
+                                                {{ subitem.title }}
+                                            </a>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
                 </ul>
 
                 <div class="text-center mb-5 md:m-0">
@@ -60,46 +89,77 @@
 
     </header>
 
-    <!-- CONTENT BLOCK -->
+
     <main class="pt-14">
         {% block content %}{% endblock %}
     </main>
 
-    <footer>
-        <div class="mx-auto inline-block text-center">
-            <p class="text-sm text-grey-500">Social Media Links</p>
+
+    <footer class="bg-grey-900 p-4 flex justify-evenly">
+        <div class="text-center">
+            <p class="text-sm text-grey-200">Where To Find Us</p>
             <hr>
-            <div >
-                {% if settings.site_settings.SocialMediaSettings.linkedin %}
-                <a href="{{ settings.site_settings.SocialMediaSettings.linkedin }}">
-                    <i class="fab fa-linkedin my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+            <div class="my-0.5 text-grey-300 text-2xl">
+                {% if settings.company.ContactDetails.linkedin %}
+                <a href="{{ settings.company.ContactDetails.linkedin }}" target="_blank">
+                    <i class="fab fa-linkedin mx-1.5"></i>
                 </a>
                 {% endif %}
                 
-                {% if settings.site_settings.SocialMediaSettings.youtube %}
-                <a href="{{ settings.site_settings.SocialMediaSettings.youtube }}">
-                    <i class="fab fa-youtube my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                {% if settings.company.ContactDetails.youtube %}
+                <a href="{{ settings.company.ContactDetails.youtube }}" target="_blank">
+                    <i class="fab fa-youtube mx-1.5"></i>
                 </a>
                 {% endif %}
                 
-                {% if settings.site_settings.SocialMediaSettings.facebook %}
-                <a href="{{ settings.site_settings.SocialMediaSettings.facebook }}">
-                    <i class="fab fa-facebook my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                {% if settings.company.ContactDetails.facebook %}
+                <a href="{{ settings.company.ContactDetails.facebook }}" target="_blank">
+                    <i class="fab fa-facebook mx-1.5"></i>
                 </a>
                 {% endif %}
                 
-                {% if settings.site_settings.SocialMediaSettings.instagram %}
-                <a href="{{ settings.site_settings.SocialMediaSettings.instagram }}">
-                    <i class="fab fa-instagram my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                {% if settings.company.ContactDetails.instagram %}
+                <a href="{{ settings.company.ContactDetails.instagram }}" target="_blank">
+                    <i class="fab fa-instagram mx-1.5"></i>
                 </a>
                 {% endif %}
                 
-                {% if settings.site_settings.SocialMediaSettings.twitter %}
-                <a href="{{ settings.site_settings.SocialMediaSettings.twitter }}">
-                    <i class="fab fa-twitter my-0.5 mx-1.5 text-grey-600 text-2xl"></i>
+                {% if settings.company.ContactDetails.twitter %}
+                <a href="{{ settings.company.ContactDetails.twitter }}" target="_blank">
+                    <i class="fab fa-twitter mx-1.5"></i>
                 </a>
                 {% endif %}
             </div>
+            <div class="text-left mt-3">
+                {% get_footer as footer %}
+                {% for address in footer %}
+                <p class="font-bold text-grey-400 text-sm">{{ address.title }} <i class="fas fa-map-marker-alt"></i></p>
+                    <address class="text-xs text-grey-300 not-italic" itemprop="address" itemscope itemtype="https://schema.org/PostalAddress">
+                        <span itemprop="streetAddress">
+                            {{ address.address1 }}
+                            {% if address.address2 %}<br>{{ address.address2 }}{% endif %}
+                        </span> <br>
+                        <span itemprop="addressLocality">{{ address.city }} -</span>
+                        <span itemprop="postalCode">{{ address.pincode }}</span> <br>
+                        {% if address.state %}<span itemprop="addressRegion">{{ address.state }}</span> <br>{% endif %}
+                        {% if address.country %}<span itemprop="addressCountry"></span>{{ address.country }}</span>{% endif %}
+                        {% if address.map_link %}
+                            <p class="text-accent-300 mt-1 mb-2">
+                                <a href="{{ address.map_link }}" target="_blank">
+                                <i class="fas fa-location-arrow"></i> GET DIRECTIONS</a>
+                            </p>{% endif %}
+                        
+                    </address>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div>
+            {% for item in navigation.menu_items.all %}
+            <a href="{{ item.link_page.url }}{% if item.section %}{{ item.section }}{% endif %}" class="text-grey-100">
+                {{ item.title }}
+            </a>
+            {% endfor %}
         </div>
     </footer>
     {# Global javascript #}

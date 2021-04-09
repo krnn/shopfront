@@ -50,7 +50,7 @@
 
 {% block extra_js %}
 <script>
-    let count = {{ self.image_carousel.all.count }};
+    let count = {{ self.image_carousel.all.count }} +0;
     const reel = document.getElementById('reel');
     if (count > 3) {
         let fSize = 231;

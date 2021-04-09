@@ -7,35 +7,36 @@
     <img alt="Staff photograph" src="{{ img.url }}"
       class="shadow-lg rounded-full max-w-full mx-auto" style="max-width: 120px;"
     />
+    <div class="bg-gradient-to-b from-primary-100 to-primary-50  p-2 pt-16 -mt-14 rounded-md">
+      <div class="pt-2 text-center">
+        <h5 itemprop="name" class="text-lg font-bold">{{ self.name }}</h5>
+        <p itemprop="jobTitle" class="mt-1 text-sm text-grey-500 uppercase">
+          {{ self.job_title }}
+        </p>
 
-    <div class="pt-2 text-center">
-      <h5 itemprop="name" class="text-lg font-bold">{{ self.name }}</h5>
-      <p itemprop="jobTitle" class="mt-1 text-sm text-grey-500 uppercase">
-        {{ self.job_title }}
-      </p>
+        <p class="mt-1 text-sm text-grey-800">
+          {% if self.short_bio %}
+            {{ self.short_bio }}
+          {% endif %}
+        </p>
 
-      <p class="mt-1 text-sm text-grey-800">
-        {% if self.short_bio %}
-          {{ self.short_bio }}
-        {% endif %}
-      </p>
+        <div class="mt-2">
+          {% if self.whatsapp %}
+          <a itemprop="telephone" class="text-grey-500 p-2" href="https://wa.me/{{ self.whatsapp }}?text=I'm%20interested%20in%20your%20products" target="_blank"><i class="fab fa-whatsapp"></i></a>
+          {% endif %}
 
-      <div class="mt-2">
-        {% if self.whatsapp %}
-        <a itemprop="telephone" class="text-grey-500 p-2" href="https://wa.me/{{ self.whatsapp }}?text=I'm%20interested%20in%20your%20products" target="_blank"><i class="fab fa-whatsapp"></i></a>
-        {% endif %}
+          {% if self.email %}
+          <a itemprop="email" class="text-grey-500 p-2" href="mailto:{{ self.email }}"><i class="fas fa-envelope"></i></a>
+          {% endif %}
 
-        {% if self.email %}
-        <a itemprop="email" class="text-grey-500 p-2" href="mailto:{{ self.email }}"><i class="fas fa-envelope"></i></a>
-        {% endif %}
+          {% if self.phone %}
+          <a itemprop="telephone" class="text-grey-500 p-2" href="tel:{{ self.phone }}"><i class="fas fa-phone-alt"></i></a>
+          {% endif %}
 
-        {% if self.phone %}
-        <a itemprop="telephone" class="text-grey-500 p-2" href="tel:{{ self.phone }}"><i class="fas fa-phone-alt"></i></a>
-        {% endif %}
-
-        {% if self.linkedin %}
-        <a itemprop="url" class="text-grey-500 p-2" href="{{ self.linkedin }}" target="_blank"><i class="fab fa-linkedin"></i></a>
-        {% endif %}
+          {% if self.linkedin %}
+          <a itemprop="url" class="text-grey-500 p-2" href="{{ self.linkedin }}" target="_blank"><i class="fab fa-linkedin"></i></a>
+          {% endif %}
+        </div>
       </div>
     </div>
 

@@ -6,6 +6,7 @@ from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel, StreamField
 from wagtail.images.edit_handlers import ImageChooserPanel
 
 from .blocks import EmployeeCardBlock
+from company.models import BusinessAddress, BusinessContact
 
 
 class HomePage(Page):
@@ -26,7 +27,7 @@ class HomePage(Page):
             PageChooserPanel("hero_cta"),
         ], heading="Hero"),
     ]
-
+    
 
 class AboutPage(Page):
     max_count = 1
@@ -49,3 +50,9 @@ class AboutPage(Page):
             StreamFieldPanel("team_cards")
         ], heading="Team Details"),
     ]
+
+    def get_context(self, request):
+        context = super().get_context(request)
+        context["addresses"] = BusinessAddress.objects.all()
+        context["numbers"] = BusinessContact.objects.all()
+        return context

@@ -1,9 +1,13 @@
 from django.db import models
+from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 
 from wagtail.core.models import Page
 from wagtail.core.fields import StreamField
 from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel, StreamFieldPanel
 from wagtail.images.edit_handlers import ImageChooserPanel
+from modelcluster.fields import ParentalKey
+from modelcluster.contrib.taggit import ClusterTaggableManager
+from taggit.models import TaggedItemBase
 
 from . import blocks
 
@@ -27,7 +31,21 @@ class BlogIndexPage(Page):
 
     def get_context(self, request, *args, **kwargs):
         context = super().get_context(request, *args, **kwargs)
-        context["posts"] = BlogPostPage.objects.live().public()
+        blog_entries = BlogPostPage.objects.child_of(self).live().order_by('-first_published_at')
+        tag = request.GET.get('tag')
+        if tag:
+            blog_entries = blog_entries.filter(tags__slug=tag)
+
+        paginator = Paginator(blog_entries, 1)
+        page = request.GET.get("page")
+        try:
+            posts = paginator.page(page)
+        except PageNotAnInteger:
+            posts = paginator.page(8)
+        except EmptyPage:
+            posts = paginator.page(paginator.num_pages)
+
+        context["posts"] = posts
         return context
 
     content_panels = Page.content_panels + [
@@ -35,10 +53,15 @@ class BlogIndexPage(Page):
     ]
 
 
+class BlogTag(TaggedItemBase):
+    content_object = ParentalKey('BlogPostPage', related_name='tagged_items', on_delete=models.CASCADE)
+
+
 class BlogPostPage(Page):
     banner  = models.ForeignKey("wagtailimages.Image", blank=True, null=True, related_name="+", on_delete=models.SET_NULL)
     brief   = models.TextField(blank=False)
     date    = models.DateField(auto_now=True)
+    tags    = ClusterTaggableManager(through=BlogTag, blank=True)
     content = StreamField([
         ("heading", blocks.StringBlock()),
         ("content", blocks.RichtextBlock()),
@@ -46,8 +69,17 @@ class BlogPostPage(Page):
         # video
     ])
 
+    def get_context(self, request, *args, **kwargs):
+        context = super().get_context(request, *args, **kwargs)
+        blog_entries = BlogPostPage.objects.sibling_of(self).live()
+        blog_entries = blog_entries.filter(tags__name__in=self.tags.all()).distinct().exclude(id=self.id)[:3]
+
+        context["posts"] = blog_entries
+        return context
+
     content_panels = Page.content_panels + [
         ImageChooserPanel("banner"),
+        FieldPanel('tags'),
         FieldPanel("brief"),
         StreamFieldPanel("content")
     ]

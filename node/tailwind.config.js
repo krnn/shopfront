@@ -28,6 +28,8 @@ module.exports = {
   variants: {
     extend: {
       borderStyle: ['hover'],
+      visibility: ['group-hover'],
+      borderRadius: ['first', 'last'],
     },
   },
   plugins: [],

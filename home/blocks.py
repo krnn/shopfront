@@ -16,3 +16,4 @@ class EmployeeCardBlock(blocks.StructBlock):
         template = "home/blocks/employee_block.html"
         label = "Team Member"
         icon = "user"
+        

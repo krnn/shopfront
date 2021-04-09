@@ -10,22 +10,35 @@
             <h2 class="text-primary-200 text-2xl">{{ self.subtitle }}</h2>
         </div>
     </div>
-    <section class="w-full bg-primary-900 py-1 px-8">
+    <section class="w-full py-1 px-8">
         <div class="container">
 
             <div class="flex">
                 {% for post in posts %}
-                <a href="{{ post.url }}" class="m-4 bg-white w-52 rounded-md p-0">
-                    {% image post.banner fill-208x208 as img %}
+                <a href="{{ post.url }}" class="m-4 bg-white w-52 rounded-md shadow-lg p-0">
+                    {% image post.specific.banner fill-208x208 as img %}
                     <img class="rounded-t-md" src="{{ img.url }}" alt="{{ img.alt }}">
                     <div class="py-1 px-4">
                         <h3 class="text-grey-900 font-bold leading-5">{{ post.title }}</h3>
-                        <p class="text-grey-600 py-2 text-sm">{{ post.brief }}</p>
+                        <p class="text-grey-600 py-2 text-sm">{{ post.specific.brief }}</p>
                     </div>
                 </a>
                 {% endfor %}
             </div>
         </div>
+
+        <div class="container text-center my-8">
+            {% if posts.paginator.num_pages > 1 %}
+                {% for page_num in posts.paginator.page_range %}
+                <a href="?page={{ page_num }}"
+                    class=" p-5 first:rounded-l-md last:rounded-r-md {% if page_num == posts.number %}bg-info-900 text-info-400{%else%}bg-info-300 hover:bg-info-400 text-info-900{% endif %}"
+                >
+                    {{ page_num }}
+                </a>
+                {% endfor %}
+            {% endif %}
+        </div>
     </section>
+
 
 {% endblock %}

@@ -5,26 +5,88 @@
 {% block content %}
 
 {% image self.header_image fill-1000x700 as headimg %}
-<div class="w-screen h-96 bg-cover bg-center relative" style="background-image: url('{{ headimg.url }}');">
-    <div class="w-screen h-96 px-6 py-4 absolute left-0 top-0 bg-primary-900 bg-opacity-70 flex justify-center items-center">
-        <h1 class="text-3xl md:text-4xl lg:text-5xl uppercase font-bold text-primary-100">{{ self.title }}</h1>
+<div itemscope itemtype="https://schema.org/LocalBusiness">
+    <div class="w-screen h-96 bg-cover bg-center relative" style="background-image: url('{{ headimg.url }}');">
+        <div class="w-screen h-96 px-6 py-4 absolute left-0 top-0 bg-primary-900 bg-opacity-70 flex justify-center items-center">
+            <h1 class="text-3xl md:text-4xl lg:text-5xl uppercase font-bold text-primary-100">{{ self.title }}</h1>
+        </div>
     </div>
-</div>
 
-<section class="bg-white py-10">
-    <article class="container mx-auto text-block text-lg leading-8">
-        <h2 class="text-2xl font-bold to-grey-600 text-center">{{ self.page_heading }}</h2>
+    <section class="bg-white pt-10 pb-52">
+        <h2 class="text-3xl font-bold text-grey-800 text-center">{{ self.page_heading }}</h2>
         <hr class="w-48 mt-3 mb-8 h-1">
-        {{ self.company_details|richtext }}
-    </article>
-</section>
+        <article class="container mx-auto text-block text-lg leading-8">
+            {{ self.company_details|richtext }}
+        </article>
+    </section>
+    <section class="bg-primary-200 pt-14 pb-52">
+        <h2 class="text-3xl font-bold text-grey-800 text-center -mt-52">{{ self.team_heading }}</h2>
+        <hr class="w-48 mt-3 mb-8 h-1">
+        <div class="p-4 container mx-auto flex flex-wrap justify-center">
+            {% for card in self.team_cards %}
+                {% include_block card %}
+            {% endfor %}
+        </div>
+    </section>
 
-<section class="bg-grey-100 py-14">
-    <h2 class="text-3xl text-center">{{ self.team_heading }}</h2>
-    <div class="p-4 container mx-auto flex flex-wrap justify-center">
-        {% for card in self.team_cards %}
-            {% include_block card %}
-        {% endfor %}
-    </div>
-</section>
+    <section class="py-10">
+        <div class="container mx-auto text-block text-lg">
+            <div class="bg-primary-900 rounded-md shadow-lg -mt-56 overflow-hidden" id="contact-us">
+
+                <div class="bg-white p-6 align-top w-auto inline-block" >
+                    <h3> Get in touch <i class="far fa-comment-alt"></i></h3>
+                    <form action="" class="pt-5">
+                        <label for="name" class="block text-sm text-primary-600 mt-3">Name</label>
+                        <input type="text" name="name" id="" class="border-b-2 w-72 px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 focus:border-primary-700">
+
+                        <label for="email" class="block text-sm text-primary-600 mt-3">Email</label>
+                        <input type="email" name="email" id="" class="border-b-2 w-72 px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 focus:border-primary-700">
+                        
+                        <label for="message" class="block text-sm text-primary-600 mt-3">Message</label>
+                        <textarea name="message" rows="3" class="border-b-2 w-72 px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 resize-none focus:border-primary-700"></textarea>
+
+                        <input type="submit" value="Send" class="block w-72 bg-accent-600 p-4 cursor-pointer rounded-md text-white font-bold hover:bg-accent-500">
+                    </form>
+                </div>
+
+                <div class="leading-8 p-6 text-primary-100 inline-block">
+                    <div class="inline-block align-top">
+                        <h3> Our Offices <i class="fas fa-map-marked-alt"></i></h3>
+                        {% for address in addresses %}
+                        <div class="text-sm mb-2">
+                            <h4>{{ address.title }}</h4>
+                            
+                            <address itemprop="address" itemscope itemtype="https://schema.org/PostalAddress">
+                                <span itemprop="streetAddress">
+                                    {{ address.address1 }}
+                                    {% if address.address2 %}<br>{{ address.address2 }}{% endif %}
+                                </span> <br>
+                                <span itemprop="addressLocality">{{ address.city }}</span> -
+                                <span itemprop="postalCode">{{ address.pincode }}</span> <br>
+                                
+                                {% if address.state %}
+                                <span itemprop="addressRegion">{{ address.state }}</span>{% if address.country %},{% endif %}
+                                {% endif %}
+                                
+                                {% if address.country %}
+                                <span itemprop="addressCountry">{{ address.country }}</span>
+                                {% endif %}
+                            </address>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="inline-block align-top">
+
+                        {% for number in numbers %}
+                        <h3 itemprop="department">{{number.department}}</h3>
+                        <p itemprop="telephone"><i class="fas fa-phone-alt"></i> {{number.phone_number}}</p>
+                        <p itemprop="email"><i class="fas fa-envelope"></i> {{number.email}}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
 {% endblock %}
