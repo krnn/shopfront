@@ -35,6 +35,8 @@ class AboutPage(Page):
     page_heading    = models.CharField(max_length=100, blank=False, null=True)
     header_image    = models.ForeignKey("wagtailimages.Image",
         null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    brand_name      = models.CharField(max_length=100, blank=False, null=True)
+    parent_company  = models.CharField(max_length=100, blank=False, null=True)
     company_details = RichTextField(blank=False, null=True)
     team_heading    = models.CharField(max_length=40, blank=True, null=True)
     team_cards      = StreamField([("emp_cards", EmployeeCardBlock(label="Employee"))], null=True, blank=True)
@@ -43,6 +45,8 @@ class AboutPage(Page):
         MultiFieldPanel([
             FieldPanel("page_heading"),
             ImageChooserPanel("header_image"),
+            FieldPanel("brand_name"),
+            FieldPanel("parent_company"),
             FieldPanel("company_details"),
         ], heading="Company Summary"),
         MultiFieldPanel([

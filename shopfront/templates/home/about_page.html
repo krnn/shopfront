@@ -5,10 +5,15 @@
 {% block content %}
 
 {% image self.header_image fill-1000x700 as headimg %}
-<div itemscope itemtype="https://schema.org/LocalBusiness">
+<div itemscope itemtype="https://schema.org/Organization">
     <div class="w-screen h-96 bg-cover bg-center relative" style="background-image: url('{{ headimg.url }}');">
-        <div class="w-screen h-96 px-6 py-4 absolute left-0 top-0 bg-primary-900 bg-opacity-70 flex justify-center items-center">
+        <div class="w-screen h-96 px-6 py-4 absolute left-0 top-0 bg-primary-900 bg-opacity-70 flex flex-col justify-center items-center">
             <h1 class="text-3xl md:text-4xl lg:text-5xl uppercase font-bold text-primary-100">{{ self.title }}</h1>
+            
+            <div class="text-center text-sm text-grey-400">
+                <span itemprop="brand" >{{ self.brand_name }}</span> from
+                <span itemprop="legalName" >{{ self.parent_company }}</span>
+            </div>
         </div>
     </div>
 
@@ -30,8 +35,8 @@
     </section>
 
     <section class="py-10">
-        <div class="container mx-auto text-block text-lg">
-            <div class="bg-primary-900 rounded-md shadow-lg -mt-56 overflow-hidden" id="contact-us">
+        <div class="container mx-auto text-lg">
+            <div class="bg-primary-900 rounded-md shadow-lg mx-auto xl:w-9/12 -mt-56 overflow-hidden" id="contact-us">
 
                 <div class="bg-white p-6 align-top w-auto inline-block" >
                     <h3> Get in touch <i class="far fa-comment-alt"></i></h3>
@@ -49,14 +54,14 @@
                     </form>
                 </div>
 
-                <div class="leading-8 p-6 text-primary-100 inline-block">
-                    <div class="inline-block align-top">
-                        <h3> Our Offices <i class="fas fa-map-marked-alt"></i></h3>
+                <div class="p-6 text-primary-100 inline-block">
+                    <div class="inline-block align-top p-4">
+                        <h3 class="font-bold text-2xl mt-1 text-primary-300"> Our Offices <i class="fas fa-map-marked-alt"></i></h3>
                         {% for address in addresses %}
-                        <div class="text-sm mb-2">
-                            <h4>{{ address.title }}</h4>
+                        <div itemprop="branchOf" itemscope itemtype="LocalBusiness" class="text-sm mb-2 pl-2">
+                            <h4 class="font-bold text-primary-200 text-lg">{{ address.title }}</h4>
                             
-                            <address itemprop="address" itemscope itemtype="https://schema.org/PostalAddress">
+                            <address itemprop="address" itemscope itemtype="https://schema.org/PostalAddress" class="pl-1">
                                 <span itemprop="streetAddress">
                                     {{ address.address1 }}
                                     {% if address.address2 %}<br>{{ address.address2 }}{% endif %}
@@ -71,17 +76,25 @@
                                 {% if address.country %}
                                 <span itemprop="addressCountry">{{ address.country }}</span>
                                 {% endif %}
+                                {% if address.map_link %}
+                                    <p class="text-accent-300 mt-1 mb-4">
+                                        <a href="{{ address.map_link }}" target="_blank">
+                                        <i class="fas fa-location-arrow"></i> GET DIRECTIONS</a>
+                                    </p>
+                                {% endif %}
                             </address>
                         </div>
                         {% endfor %}
                     </div>
 
-                    <div class="inline-block align-top">
+                    <div class="inline-block align-top p-4">
 
                         {% for number in numbers %}
-                        <h3 itemprop="department">{{number.department}}</h3>
-                        <p itemprop="telephone"><i class="fas fa-phone-alt"></i> {{number.phone_number}}</p>
-                        <p itemprop="email"><i class="fas fa-envelope"></i> {{number.email}}</p>
+                        <h3 itemprop="department" class="font-bold text-2xl mt-1 text-primary-300">{{number.department}}</h3>
+                        <a class="text-sm m-0 pl-3" href="tel:{{ number.phone }} itemprop="telephone"><i class="fas fa-phone-alt"></i> {{number.phone_number}}</a>
+                        {% if number.email %}<br>
+                        <a class="text-sm m-0 pl-3" href="mailto:{{ number.email }} itemprop="email"><i class="fas fa-envelope"></i> {{number.email}}</a>
+                        {% endif %}
                         {% endfor %}
                     </div>
                 </div>

@@ -36,14 +36,14 @@ class BlogIndexPage(Page):
         if tag:
             blog_entries = blog_entries.filter(tags__slug=tag)
 
-        paginator = Paginator(blog_entries, 1)
+        paginator = Paginator(blog_entries, 8)
         page = request.GET.get("page")
         try:
             posts = paginator.page(page)
         except PageNotAnInteger:
-            posts = paginator.page(8)
+            posts = paginator.page(1)
         except EmptyPage:
-            posts = paginator.page(paginator.num_pages)
+            posts = paginator.page(1)
 
         context["posts"] = posts
         return context
