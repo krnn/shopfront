@@ -1,4 +1,4 @@
-{% load static wagtailuserbar menus_tags footer_tags %}
+{% load static wagtailuserbar menus_tags footer_tags cache %}
 
 <!DOCTYPE html>
 <html class="no-js" lang="en">
@@ -29,12 +29,12 @@
     {# Override this in templates to add extra stylesheets #}
     {% endblock %}
 </head>
-
 <body class="{% block body_class %}{% endblock %} antialiased bg-grey-50">
     {% wagtailuserbar %}
-
     
-    <header class="z-50	lg:px-16 px-6 py-1 bg-white fixed w-screen" role="navigation" aria-label="main navigation">
+    
+    {% cache 2592000 header %}
+    <header class="z-50	lg:px-16 px-6 py-1 bg-white fixed w-screen shadow-md" role="navigation" aria-label="main navigation">
         <nav class="flex flex-wrap items-center justify-between w-full">
             <a class="navbar-item" href="/">
                 <img src="https://bulma.io/images/bulma-logo.png" class="h-12" />
@@ -88,6 +88,7 @@
         </div>
 
     </header>
+    {% endcache %}
 
 
     <main class="pt-14">
@@ -95,6 +96,7 @@
     </main>
 
 
+    {% cache 2592000 footer %}
     <footer class="bg-grey-900 p-4 flex justify-evenly">
         <div class="text-center">
             <p class="text-sm text-grey-200">Where To Find Us</p>
@@ -163,6 +165,9 @@
             {% endfor %}
         </div>
     </footer>
+    {% endcache %}
+
+    
     {# Global javascript #}
     <script type="text/javascript" src="{% static 'js/shopfront.js' %}"></script>
 

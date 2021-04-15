@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.core.cache import cache
+from django.core.cache.utils import make_template_fragment_key
 
 from wagtail.core.models import Page
 from wagtail.core.fields import StreamField
@@ -64,7 +66,7 @@ class BlogPostPage(Page):
     tags    = ClusterTaggableManager(through=BlogTag, blank=True)
     content = StreamField([
         ("heading", blocks.StringBlock()),
-        ("content", blocks.RichtextBlock()),
+        ("text_body", blocks.RichtextBlock()),
         ("image", blocks.ImageBlock()),
         # video
     ])
@@ -79,7 +81,16 @@ class BlogPostPage(Page):
 
     content_panels = Page.content_panels + [
         ImageChooserPanel("banner"),
-        FieldPanel('tags'),
+        FieldPanel("tags"),
         FieldPanel("brief"),
         StreamFieldPanel("content")
     ]
+
+    def save(self, *args, **kwargs):
+
+        key1 = make_template_fragment_key("blog_preview", [self.id])
+        cache.delete(key1)
+        key2 = make_template_fragment_key("blog_view", [self.id])
+        cache.delete(key2)
+
+        return super().save(*args, **kwargs)

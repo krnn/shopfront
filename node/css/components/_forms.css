@@ -1,0 +1,11 @@
+#contact-us div form label {
+    @apply block text-sm text-primary-600 mt-3;
+}
+
+#contact-us div form input {
+    @apply border-b-2 w-full px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 focus:border-primary-700;
+}
+
+#contact-us div form textarea {
+    @apply border-b-2 w-full px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 h-24 mb-3 resize-none focus:border-primary-700;
+}

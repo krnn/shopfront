@@ -1,4 +1,6 @@
 from django.db import models
+from django.core.cache import cache
+from django.core.cache.utils import make_template_fragment_key
 
 from wagtail.core.fields import RichTextField, StreamField
 from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel, StreamFieldPanel, PageChooserPanel, InlinePanel
@@ -55,6 +57,15 @@ class BusinessAddress(models.Model):
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+
+        key1 = make_template_fragment_key("footer")
+        cache.delete(key1)
+        key2 = make_template_fragment_key("about")
+        cache.delete(key2)
+
+        return super().save(*args, **kwargs)
+
 register_snippet(BusinessAddress)
 
 
@@ -72,6 +83,15 @@ class BusinessContact(models.Model):
     def __str__(self):
         return self.department
 
+    def save(self, *args, **kwargs):
+
+        key1 = make_template_fragment_key("footer")
+        cache.delete(key1)
+        key2 = make_template_fragment_key("about")
+        cache.delete(key2)
+
+        return super().save(*args, **kwargs)
+
 register_snippet(BusinessContact)
 
 
@@ -87,6 +107,13 @@ class Menu(ClusterableModel):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+
+        key = make_template_fragment_key("header")
+        cache.delete(key)
+
+        return super().save(*args, **kwargs)
 
 register_snippet(Menu)
 
@@ -119,5 +146,10 @@ class MenuItem(Orderable):
         else:
             return null
 
-# class PageFooter():
+    def save(self, *args, **kwargs):
+
+        key = make_template_fragment_key("header")
+        cache.delete(key)
+
+        return super().save(*args, **kwargs)
 

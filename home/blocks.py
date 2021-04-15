@@ -17,3 +17,9 @@ class EmployeeCardBlock(blocks.StructBlock):
         label = "Team Member"
         icon = "user"
         
+    def save(self, *args, **kwargs):
+
+        key = make_template_fragment_key("about")
+        cache.delete(key)
+
+        return super().save(*args, **kwargs)

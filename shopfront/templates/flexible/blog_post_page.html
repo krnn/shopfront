@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 
 
-{% load wagtailcore_tags wagtailimages_tags %}
+{% load wagtailcore_tags wagtailimages_tags cache %}
 
 {% block content %}
-<div class="container bg-white">
 
+<div class="container bg-white">
+    {% cache 2592000 blog_social_share %}
     <div class="bg-white p-2 shadow-lg fixed top-1/3 right-0 text-grey-500 text-xl text-center rounded-l">
 
         <p class="text-sm">Share</p>
@@ -23,7 +24,9 @@
         </a> <br>
 
     </div>
+    {% endcache %}
 
+    {% cache 2592000 blog_view self.id %}
     <article class="text-block mx-auto">
         <h1 class="text-4xl text-grey-900 font-bold">{{ self.title }}</h1>
         <div class="my-2 text-sm">
@@ -42,6 +45,7 @@
         {% include_block page.content %}
             
     </article>
+    {% endcache %}
 </div>
 
 <section class="text-center bg-grey-200 container py-4">

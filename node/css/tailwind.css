@@ -3,6 +3,7 @@
 @import "tailwindcss/utilities";
 
 @import "./components/_header.css";
+@import "./components/_forms.css";
 
 @import "./utilities/_screen-sizes.css";
 @import "./utilities/_text.css";

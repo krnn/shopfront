@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 
-{% load wagtailcore_tags wagtailimages_tags %}
+{% load wagtailcore_tags wagtailimages_tags cache %}
 
 {% block content %}
 
 {% image self.header_image fill-1000x700 as headimg %}
+
+{% cache 2592000 about %}
 <div itemscope itemtype="https://schema.org/Organization">
     <div class="w-screen h-96 bg-cover bg-center relative" style="background-image: url('{{ headimg.url }}');">
         <div class="w-screen h-96 px-6 py-4 absolute left-0 top-0 bg-primary-900 bg-opacity-70 flex flex-col justify-center items-center">
@@ -36,26 +38,20 @@
 
     <section class="py-10">
         <div class="container mx-auto text-lg">
-            <div class="bg-primary-900 rounded-md shadow-lg mx-auto xl:w-9/12 -mt-56 overflow-hidden" id="contact-us">
+            <div class="bg-primary-900 rounded-md shadow-lg mx-auto w-3/4 lg:whitespace-nowrap max-w-6xl lg:w-full -mt-56" id="contact-us">
 
-                <div class="bg-white p-6 align-top w-auto inline-block" >
-                    <h3> Get in touch <i class="far fa-comment-alt"></i></h3>
-                    <form action="" class="pt-5">
-                        <label for="name" class="block text-sm text-primary-600 mt-3">Name</label>
-                        <input type="text" name="name" id="" class="border-b-2 w-72 px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 focus:border-primary-700">
-
-                        <label for="email" class="block text-sm text-primary-600 mt-3">Email</label>
-                        <input type="email" name="email" id="" class="border-b-2 w-72 px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 focus:border-primary-700">
-                        
-                        <label for="message" class="block text-sm text-primary-600 mt-3">Message</label>
-                        <textarea name="message" rows="3" class="border-b-2 w-72 px-2 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 resize-none focus:border-primary-700"></textarea>
-
-                        <input type="submit" value="Send" class="block w-72 bg-accent-600 p-4 cursor-pointer rounded-md text-white font-bold hover:bg-accent-500">
+                <div class="bg-white align-top p-6 rounded-t-md lg:rounded-l-md lg:rounded-r-none w-full lg:w-auto inline-block" >
+                    
+                    <h3 class="font-bold text-grey-800 text-2xl text-center"> {{ self.form_heading }} <i class="far fa-comment-alt"></i></h3>
+                    <form action="{% pageurl page %}" method="POST" class="pt-5 w-full lg:w-72 inline-block mx-auto">
+                        {% csrf_token %}
+                        {{ form }}
+                        <button class="block w-full bg-accent-600 p-4 cursor-pointer rounded-md text-white font-bold hover:bg-accent-500">Send</button>
                     </form>
                 </div>
 
-                <div class="p-6 text-primary-100 inline-block">
-                    <div class="inline-block align-top p-4">
+                <div class="lg:w-2/3 text-primary-100 inline-flex flex-wrap justify-evenly">
+                    <div class="p-4">
                         <h3 class="font-bold text-2xl mt-1 text-primary-300"> Our Offices <i class="fas fa-map-marked-alt"></i></h3>
                         {% for address in addresses %}
                         <div itemprop="branchOf" itemscope itemtype="LocalBusiness" class="text-sm mb-2 pl-2">
@@ -87,14 +83,15 @@
                         {% endfor %}
                     </div>
 
-                    <div class="inline-block align-top p-4">
-
+                    <div class="flex flex-wrap flex-col">
                         {% for number in numbers %}
-                        <h3 itemprop="department" class="font-bold text-2xl mt-1 text-primary-300">{{number.department}}</h3>
-                        <a class="text-sm m-0 pl-3" href="tel:{{ number.phone }} itemprop="telephone"><i class="fas fa-phone-alt"></i> {{number.phone_number}}</a>
-                        {% if number.email %}<br>
-                        <a class="text-sm m-0 pl-3" href="mailto:{{ number.email }} itemprop="email"><i class="fas fa-envelope"></i> {{number.email}}</a>
-                        {% endif %}
+                        <div class="p-4">
+                            <h3 itemprop="department" class="font-bold text-2xl mt-1 text-primary-300">{{number.department}}</h3>
+                            <a class="text-sm m-0 pl-3" href="tel:{{ number.phone }} itemprop="telephone"><i class="fas fa-phone-alt"></i> {{number.phone_number}}</a>
+                            {% if number.email %}<br>
+                            <a class="text-sm m-0 pl-3" href="mailto:{{ number.email }} itemprop="email"><i class="fas fa-envelope"></i> {{number.email}}</a>
+                            {% endif %}
+                        </div>
                         {% endfor %}
                     </div>
                 </div>
@@ -102,4 +99,5 @@
         </div>
     </section>
 </div>
+{% endcache %}
 {% endblock %}
