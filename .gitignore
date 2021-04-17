@@ -43,7 +43,9 @@ wheels/
 /.tox/
 /venv
 /node_modules/
-jssrc/node_modules
+node_modules/
+node/node_modules/
+node/node_modules/@types/
 npm-debug.log*
 *.idea/
 /*.egg/

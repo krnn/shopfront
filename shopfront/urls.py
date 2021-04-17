@@ -32,6 +32,7 @@ if settings.DEBUG:
     urlpatterns += [path('__debug__/', include(debug_toolbar.urls)),]
 
 urlpatterns = urlpatterns + [
+    path("api/", include("store.urls")),
     # For anything not caught by a more specific rule above, hand over to
     # Wagtail's page serving mechanism. This should be the last pattern in
     # the list:
