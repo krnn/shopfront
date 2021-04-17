@@ -48,3 +48,7 @@ class ProductPage(Page):
         # cache.delete(key2)
 
         return super().save(*args, **kwargs)
+
+
+class StorePage(Page):
+    max_count = 1

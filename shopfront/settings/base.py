@@ -29,9 +29,12 @@ INSTALLED_APPS = [
     'flexible',
     'company',
     'products',
+    'store',
 
     'wagtail.contrib.routable_page',
     'wagtail.contrib.settings',
+    'wagtail.contrib.modeladmin',
+    
 
     'wagtail.contrib.forms',
     'wagtail.contrib.redirects',
