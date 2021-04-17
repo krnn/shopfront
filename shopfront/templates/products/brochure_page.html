@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% load wagtailcore_tags wagtailimages_tags cache %}
+
+{% block content %}
+
+{% image self.header_image fill-1000x300 as headimg %}
+
+<div class="w-screen h-96 bg-cover bg-center relative" style="background-image: url('{{ headimg.url }}');">
+    <div class="w-screen h-96 px-6 py-4 absolute left-0 top-0 bg-primary-900 bg-opacity-70 flex flex-col justify-center items-center">
+        <h1 class="text-3xl md:text-4xl lg:text-5xl uppercase font-bold text-primary-100">{{ self.title }}</h1>  
+    </div>
+</div>
+
+<div class="container text-center p-24 flex flex-wrap justify-evenly">
+    {% for product in products %}
+    {% cache 2592000 brochure product.id %}
+    <a href="{{ product.url }}" class="block bg-white rounded-sm p-3 shadow-md w-60">
+
+        {% image product.image fill-216x215 as img %}
+        <img src="{{ img.url }}" alt="">
+        <h2 class="text-2xl font-bold text-grey-800 m-2">{{ product.product_name }}</h2>
+        <p class="text-sm text-grey-600">{{ product.description }}</p>
+    </a>
+    {% endcache %}
+    {% endfor %}
+</div>
+
+
+{% endblock %}

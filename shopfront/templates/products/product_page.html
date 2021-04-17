@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% load wagtailcore_tags wagtailimages_tags cache %}
+
+{% block content %}
+
+<div>
+    <h1>{{ self.product_name }}</h1>
+    <p>{{ self.description }}</p>
+</div>
+
+{% endblock %}

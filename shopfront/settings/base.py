@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'search',
     'flexible',
     'company',
+    'products',
 
     'wagtail.contrib.routable_page',
     'wagtail.contrib.settings',
