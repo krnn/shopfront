@@ -25,6 +25,10 @@ INTERNAL_IPS = [
     '172.17.0.1',
 ]
 
+
+# ALLOW CORS FOR TESTING PURPOSES
+CORS_ORIGIN_ALLOW_ALL = True
+
 try:
     from .local import *
 except ImportError:

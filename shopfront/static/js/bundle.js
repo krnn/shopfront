@@ -336,7 +336,7 @@ var app = (function () {
     		c: function create() {
     			main = element("main");
     			h1 = element("h1");
-    			t0 = text("Hello ");
+    			t0 = text("Hi ");
     			t1 = text(/*name*/ ctx[0]);
     			t2 = text("!");
     			t3 = space();
@@ -348,8 +348,8 @@ var app = (function () {
     			attr_dev(h1, "class", "svelte-1tky8bj");
     			add_location(h1, file, 5, 1, 46);
     			attr_dev(a, "href", "https://svelte.dev/tutorial");
-    			add_location(a, file, 6, 14, 83);
-    			add_location(p, file, 6, 1, 70);
+    			add_location(a, file, 6, 14, 80);
+    			add_location(p, file, 6, 1, 67);
     			attr_dev(main, "class", "svelte-1tky8bj");
     			add_location(main, file, 4, 0, 38);
     		},
@@ -446,7 +446,7 @@ var app = (function () {
     }
 
     const app = new App({
-    	target: document.body,
+    	target: document.getElementById("shop"),
     	props: {
     		name: 'world'
     	}
@@ -455,4 +455,4 @@ var app = (function () {
     return app;
 
 }());
-//# sourceMappingURL=store.js.map
+//# sourceMappingURL=bundle.js.map

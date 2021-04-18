@@ -1,9 +1,9 @@
 import App from './App.svelte';
 
 const app = new App({
-	target: document.body,
+	target: document.getElementById("shop"),
 	props: {
-		name: 'world'
+		baseURL: 'http://localhost:8000/api/'
 	}
 });
 
