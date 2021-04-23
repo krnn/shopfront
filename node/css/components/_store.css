@@ -1,0 +1,22 @@
+.store-grid {
+    @apply flex flex-wrap justify-center pt-16 md:pt-2 sm:justify-evenly md:justify-start md:ml-52;
+}
+
+.store-card {
+    @apply rounded-md w-1/2 sm:w-64 p-2 md:m-2 hover:shadow-md hover:bg-white;
+}
+
+.cart-overlay {
+    width: calc(100vw - 20rem);
+}
+
+.cart-list {
+    height: calc(100% - 124px);
+    overflow-y: scroll;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+    @apply border-b border-grey-800;
+}
+.cart-list::-webkit-scrollbar {
+    display: none;
+}

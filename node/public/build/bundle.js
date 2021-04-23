@@ -370,6 +370,7 @@ var app = (function () {
     			t2 = text(t2_value);
     			t3 = space();
     			add_location(h2, file, 15, 2, 253);
+    			attr_dev(p, "class", "bg-primary-300");
     			add_location(p, file, 16, 2, 279);
     			add_location(div, file, 14, 1, 245);
     		},
@@ -420,7 +421,7 @@ var app = (function () {
     				each_blocks[i].c();
     			}
 
-    			attr_dev(main, "class", "svelte-1tky8bj");
+    			attr_dev(main, "class", "svelte-1h6otfa");
     			add_location(main, file, 12, 0, 208);
     		},
     		l: function claim(nodes) {

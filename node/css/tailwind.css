@@ -4,7 +4,9 @@
 
 @import "./components/_header.css";
 @import "./components/_forms.css";
+@import "./components/_buttons.css";
+@import "./components/_store.css";
 
 @import "./utilities/_screen-sizes.css";
 @import "./utilities/_text.css";
-@import "./utilities/_hr.css";
+@import "./utilities/_defaults.css";

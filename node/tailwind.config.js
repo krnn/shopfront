@@ -5,6 +5,7 @@ module.exports = {
     content: [
       '../shopfront/templates/*.html',
       '../shopfront/templates/**/*.html',
+      '../shopfront/static/js/*.js',
     ]
   },
   darkMode: false, // or 'media' or 'class'
@@ -27,9 +28,9 @@ module.exports = {
   },
   variants: {
     extend: {
-      borderStyle: ['hover'],
+      borderStyle: ['hover', 'last'],
       visibility: ['group-hover'],
-      borderRadius: ['first', 'last'],
+      borderRadius: ['first', 'last']
     },
   },
   plugins: [],

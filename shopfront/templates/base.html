@@ -30,14 +30,14 @@
     {% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %} antialiased bg-grey-50">
-    {% wagtailuserbar %}
+    {# wagtailuserbar #}
     
     
     {% cache 2592000 header %}
-    <header class="z-50	lg:px-16 px-6 py-1 bg-white fixed w-screen shadow-md" role="navigation" aria-label="main navigation">
+    <header class="z-40	lg:px-16 px-6 py-1 bg-white fixed w-screen shadow-md" role="navigation" aria-label="main navigation">
         <nav class="flex flex-wrap items-center justify-between w-full">
             <a class="navbar-item" href="/">
-                <img src="https://bulma.io/images/bulma-logo.png" class="h-12" />
+                <img src="{% static 'images/logo.png' %}" class="h-12" />
             </a>
             <label for="hamburger" class="cursor-pointer md:hidden block">
                 <img src="https://cdn2.iconfinder.com/data/icons/4web-3/139/menu-512.png" alt="main menu" width="40">

@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel
+from wagtail.images.edit_handlers import ImageChooserPanel
+
 
 class Customer(models.Model):
     user    = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
@@ -12,9 +15,34 @@ class Customer(models.Model):
 
 
 class Product(models.Model):
-    sku     = models.CharField(max_length=30)
-    name    = models.CharField(max_length=100)
-    price   = models.DecimalField(max_digits=8, decimal_places=2)
+    sku                 = models.CharField(max_length=30)
+    name                = models.CharField(max_length=100)
+    description         = models.TextField(blank=True)
+    price               = models.DecimalField(max_digits=8, decimal_places=2)
+    image               = models.ForeignKey("wagtailimages.Image",
+        null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    units               = models.CharField(max_length=30)
+    quantity_available  = models.IntegerField(default=0)
+    moq                 = models.IntegerField(default=1)
+
+    @property
+    def image_url(self):
+        return self.image.file.url
+    
+
+    panels = [
+        MultiFieldPanel([
+            FieldPanel('sku'),
+            FieldPanel('name'),
+            FieldPanel('description'),
+            FieldPanel('price'),
+            ImageChooserPanel('image'),
+            FieldPanel('units'),
+            FieldPanel('quantity_available'),
+            FieldPanel('moq', heading='Minimum Order Quantity'),
+        ]),
+    ]
+
 
     def __str__(self):
         return self.name

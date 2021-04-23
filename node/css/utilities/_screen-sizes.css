@@ -2,6 +2,10 @@
     height: calc(100vh - 3.5rem);
 }
 
+.min-h-fit {
+    min-height: calc(100vh - 3.5rem);
+}
+
 .h-fit-90 {
     height: calc(90vh - 3.5rem);
 }

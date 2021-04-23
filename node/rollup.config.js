@@ -34,7 +34,7 @@ export default {
 		sourcemap: true,
 		format: 'iife',
 		name: 'app',
-		file: 'public/build/bundle.js'
+		file: '../shopfront/static/js/bundle.js'
 	},
 	plugins: [
 		svelte({

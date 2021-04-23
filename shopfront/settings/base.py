@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'wagtail.contrib.modeladmin',
     
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
 
     'wagtail.contrib.forms',
@@ -97,6 +98,12 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'shopfront.wsgi.application'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+}
 
 
 # Database
