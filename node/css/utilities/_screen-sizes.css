@@ -22,3 +22,11 @@
 @media (min-width: 640px) {
     .h-hero { max-height: 70vw; }
 }
+
+.max-w-hd {
+    max-width: 900px;
+}
+
+.w-form {
+    width: calc(40rem + 10px);
+}

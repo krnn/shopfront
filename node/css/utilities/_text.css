@@ -21,3 +21,7 @@ article p {
 .text-block p a {
     @apply bg-info-200 text-info-800 border-info-800 cursor-pointer border-b-2 border-dotted hover:border-solid hover:border-accent-500 hover:text-accent-600;
 }
+
+.tx0 {
+    font-size: 0;
+}

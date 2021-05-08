@@ -7,7 +7,7 @@ admin.site.register(Customer)
 admin.site.register(Product)
 admin.site.register(Order)
 admin.site.register(OrderItem)
-admin.site.register(ShippingAddress)
+# admin.site.register(ShippingAddress)
 
 class CustomerAdmin(ModelAdmin):
     model = Customer
@@ -15,8 +15,8 @@ class CustomerAdmin(ModelAdmin):
     menu_icon = "user"
     add_to_settings_menu = False
     exclude_from_explorer = False
-    list_display = ("name", )
-    search_fields = ("name",)
+    list_display = ("company", )
+    search_fields = ("company",)
 
 modeladmin_register(CustomerAdmin)
 

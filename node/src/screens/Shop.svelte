@@ -1,23 +1,23 @@
 <script>
     import { filteredProducts, nameF, cartItems } from '../stores.js';
 	import ProductTile from './ProductTile.svelte';
+    import { addItem } from '../service.js';
 
     let nameTerm = '';
 
-    const addToCart = (data) => {
+    const addToCart = async(data) => {
+        let iId = await addItem(data);
         for (let i = 0; i < $cartItems.length; i++) {
-            if ($cartItems[i].id === data.id) {
+            if ($cartItems[i].product.id === data.id) {
                 $cartItems[i].quantity++;
                 $cartItems = $cartItems
                 return
             }
         }
         let temp = {}
-        temp.id = data.id
-        temp.name = data.name
-        temp.price = data.price
-        temp.image_url = data.image_url
-        temp.units = data.units
+        temp.id = iId
+        temp.product = {}
+        temp.product = data
         temp.quantity = data.moq
         cartItems.update(items => [...items, temp])
     }

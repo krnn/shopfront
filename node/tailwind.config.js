@@ -30,7 +30,7 @@ module.exports = {
     extend: {
       borderStyle: ['hover', 'last'],
       visibility: ['group-hover'],
-      borderRadius: ['first', 'last']
+      borderRadius: ['first', 'last'],
     },
   },
   plugins: [],

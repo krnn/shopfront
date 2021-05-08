@@ -1,26 +1,28 @@
 <script>
     import { cartItems } from '../stores.js'
+    import { removeItem } from '../service.js'
     export let item;
     export let updateCart;
 
     let newQuantity = item.quantity;
 
     const removeFromCart = () => {
-        $cartItems = $cartItems.filter(i => i.id !== item.id)
+        removeItem({userId: userId, itemId: item.id})
+        $cartItems = $cartItems.filter(i => i.product.id !== item.product.id)
     }
-    $: itemTotal = (item.price * item.quantity).toFixed(2)
+    $: itemTotal = (item.product.price * item.quantity).toFixed(2)
 </script>
 
 <div class="relative border-b border-grey-300 py-2 last:border-none">
-    <img src="{item.image_url}" class="inline-block w-12 h-12" alt="">
+    <img src="{item.product.image_url}" class="inline-block w-12 h-12" alt="">
 
     <div class=" inline-block w-52 align-middle">
-        <p class="text-grey-700">{item.name}</p>
-        <input type="number" min="{item.moq}" bind:value={newQuantity}
-        class="w-24 text-lg text-primary-900 text-right focus:outline-none rounded-t-sm border-b-2 pr-1 bg-info-100 border-info-400 focus:border-primary-400">
-        <span class="text-sm text-grey-500">{item.units}</span>
+        <p class="text-grey-700">{item.product.name}</p>
+        <input type="number" min="{item.product.moq}" bind:value={newQuantity}
+        class="w-24 cart-input">
+        <span class="text-sm text-grey-500">{item.product.units}</span>
     </div>
-    <button class="absolute text-lg focus:outline-none text-grey-400 hover:text-accent-600" on:click={removeFromCart}>
+    <button class="btn-close" on:click={removeFromCart}>
         <i class="far fa-trash-alt"></i>
     </button>
 

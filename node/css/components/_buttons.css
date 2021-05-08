@@ -17,3 +17,7 @@
 .btn-cart {
     @apply fixed p-3 bg-white border-2 shadow-md border-primary-600 rounded-full z-50 focus:outline-none bottom-10 right-10 sm:top-0 sm:bottom-auto sm:right-12 md:right-2 sm:border-none sm:shadow-none sm:rounded-none;
 }
+
+.btn-close {
+    @apply absolute text-lg focus:outline-none text-grey-400 hover:text-accent-600;
+}

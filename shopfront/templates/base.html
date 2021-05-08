@@ -33,7 +33,6 @@
     {# wagtailuserbar #}
     
     
-    {% cache 2592000 header %}
     <header class="z-40	lg:px-16 px-6 py-1 bg-white fixed w-screen shadow-md" role="navigation" aria-label="main navigation">
         <nav class="flex flex-wrap items-center justify-between w-full">
             <a class="navbar-item" href="/">
@@ -45,6 +44,7 @@
             <input type="checkbox" name="hamburger" class="hidden" id="hamburger">
             <div id="mainmenu" class="hidden md:flex justify-between md:items-center md:w-2/3 lg:w-3/4 xl:w-5/6 w-screen">
                 
+                {% cache 2592000 header %}
                 {% get_menu "main" as navigation %}
                 <ul class="flex flex-col md:flex-row md:h-auto h-fit-90 items-center justify-evenly md:w-3/4 lg:w-auto text-base text-grey-800">
                     {% for item in navigation.menu_items.all %}
@@ -77,10 +77,18 @@
                     </li>
                     {% endfor %}
                 </ul>
+                {% endcache %}
 
                 <div class="text-center mb-5 md:m-0">
-                    <span>Login</span>
-                    <span>Sign up</span>
+                    {% if user.is_authenticated %}
+                    <form method="POST" action="{% url 'logoutUser' %}">
+                        {% csrf_token %}
+                        <button class="btn-m btn-w" type="submit">Logout</button>
+                    </form>
+                    {% else %}
+                    <button class="btn-m btn-a" onclick="toggleAuthModal('R')">Sign Up</button>
+                    <button class="btn-m btn-w" onclick="toggleAuthModal('L')">Login</button>
+                    {% endif %}
                 </div>
             </div>
         </nav>
@@ -88,7 +96,6 @@
         </div>
 
     </header>
-    {% endcache %}
 
 
     <main class="pt-14">
@@ -167,8 +174,44 @@
     </footer>
     {% endcache %}
 
+    <div id="auth-modal" class="fixed bottom-0 left-0 h-fit w-screen bg-primary-900 bg-opacity-50 flex justify-center items-center invisible">
+        <div class="relative w-80 bg-white rounded-md shadow-md pb-4 overflow-hidden">
+            <button class="btn-close top-1 right-2" onclick="toggleAuthModal()"><i class="fas fa-times-circle text-2xl"></i></button>
+            <div id="auth-form-reel" class="w-form bg-white transition-all">
+
+                <form method="POST" action="{% url 'registerUser' %}" class="inline-block w-80 px-4">
+                    {% csrf_token %}
+                    <h1 class="text-center text-2xl font-bold text-grey-700 py-1">Register</h1>
+                    
+                    <label class="form-label" for="email">Email</label>
+                    <input class="text-lg form-input" id="r-email" type="email" name="username" required>
+                    <label class="form-label" for="password1">Password</label>
+                    <input class="text-lg form-input" id="r-password1" type="password" name="password1" required>
+                    <label class="form-label" for="password2">Retype Password</label>
+                    <input class="text-lg form-input" id="r-password2" type="password" name="password2" required>
+        
+                    <button type="submit" class="mt-4 w-full text-lg btn-a btn-m">Register</button>
+                </form>
+
+                <form method="POST" action="{% url 'loginUser' %}" class="inline-block w-80 px-4">
+                    {% csrf_token %}
+                    <h1 class="text-center text-2xl font-bold text-grey-700 py-1">Login</h1>
+        
+                    <label class="form-label" for="email">Email</label>
+                    <input class="text-lg form-input" type="email" id="l-email" name="username" required>
+                    <label class="form-label" for="password">Password</label>
+                    <input class="text-lg form-input" type="password" id="l-password" name="password" required>
+        
+                    <button type="submit" class="mt-4 w-full text-lg btn-p btn-m">Login</button>
+                </form>
+                
+            </div>
+        </div>
+    </div>
+
     
     {# Global javascript #}
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script type="text/javascript" src="{% static 'js/shopfront.js' %}"></script>
 
     {% block extra_js %}

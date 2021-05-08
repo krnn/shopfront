@@ -1,16 +1,21 @@
 <script>
-    import { current_component } from 'svelte/internal';
-import { cartItems } from '../stores.js';
+    import { fade, fly } from 'svelte/transition';
+    import { cartItems } from '../stores.js';
     import CartItem from './CartItem.svelte';
+    import { updateItem, removeItem } from '../service.js';
 
     let showCart = false;
 
     const updateCart = (data, n) => {
-        if (n === 0) {
+        if (n <= 0) {
+            removeItem({userId: userId, itemId: data.id})
             $cartItems = $cartItems.filter(i => i.id !== data.id)
+        } else if (n < data.product.moq) {
+            
         } else {
             for (let i = 0; i < $cartItems.length; i++) {
-                if ($cartItems[i].id === data.id) {
+                updateItem({userId: userId, itemId: data.id, n: n});
+                if ($cartItems[i].product.id === data.product.id) {
                     $cartItems[i].quantity = n;
                     $cartItems = $cartItems
                 }
@@ -19,7 +24,7 @@ import { cartItems } from '../stores.js';
     }
 
     const toggleCart = () => showCart = !showCart;
-    $: cartTotal = $cartItems.length ? $cartItems.map(i => (i.quantity * i.price)).reduce((acc, cur) => acc + cur).toFixed(2) : 0
+    $: cartTotal = $cartItems.length ? $cartItems.map(i => (i.quantity * i.product.price)).reduce((acc, cur) => acc + cur).toFixed(2) : 0
 </script>
 
 <button class="btn-cart" on:click={toggleCart}>
@@ -40,7 +45,7 @@ import { cartItems } from '../stores.js';
 
 
 {#if showCart} 
-<div class="fixed flex bottom-0 left-0 w-screen bg-white bg-opacity-50 z-30 md:z-40">
+<div transition:fly class="fixed flex bottom-0 left-0 w-screen bg-white bg-opacity-50 z-30 md:z-40">
     <span class="h-fit cart-overlay" on:click={toggleCart}></span>
     <div class="h-fit w-80 bg-white border-l border-grey-200 p-5 shadow-md">
         <h2>Cart</h2>
@@ -48,11 +53,11 @@ import { cartItems } from '../stores.js';
         <div class="cart-list">
     
             {#if $cartItems.length}
-            {#each $cartItems as item}
+            {#each $cartItems as item (item.product.id)}
             <CartItem {item} {updateCart}/>
             {/each}
             {:else}
-            <p class="text-grey-400 text-center text-sm">Cart is empty</p>
+            <p transition:fade class="text-grey-400 text-center text-sm">Cart is empty</p>
             {/if}
             
         </div>
@@ -62,7 +67,10 @@ import { cartItems } from '../stores.js';
             <span class="align-top text-2xl text-grey-500">&#8377;<span class="font-bold text-grey-700">{Math.trunc(cartTotal)}</span></span>
             <span class="align-top text-sm text-grey-500">{cartTotal ? (cartTotal).toString().split(".")[1] : "00"}</span>
         </div>
-        <button class="text-lg btn-m btn-a w-full"><i class="fas fa-cash-register"></i> Proceed To Checkout</button>
+        <a href="/api/checkout" class="inline-block text-center text-lg btn-m btn-a w-full">
+            <i class="fas fa-cash-register"></i>
+            Proceed To Checkout
+        </a>
     </div>
 </div>
 {/if}

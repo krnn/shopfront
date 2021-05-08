@@ -61,7 +61,6 @@
         
         setInterval(() => {
             if (i === 0 || i === moves) {leftward = !leftward}
-            console.log('moves=', moves, ", i = ", i);
             if (leftward) i++
             else i--
             reel.style.marginLeft = (fSize * -i) + "px";

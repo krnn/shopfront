@@ -3,7 +3,6 @@
 {% load static %}
 
 {% block extra_meta %}
-<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 <script defer src="{% static 'js/bundle.js' %}"></script>
 <link rel="stylesheet" type="text/css" href="{% static 'js/bundle.css' %}">
 {% endblock %}
@@ -13,4 +12,12 @@
 
 <div id="shop"></div>
 
+{% endblock %}
+
+
+{% block extra_js %}
+    <script>
+        const user = "{{ request.user }}";
+        let userId = "{{ request.user.id }}" ;
+    </script>
 {% endblock %}

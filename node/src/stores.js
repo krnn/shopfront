@@ -24,6 +24,11 @@ export const setFetchedProducts = (data) => {
 // Cart items
 export const cartItems = writable([]);
 
+// Populate cart if exists in database
+export const setFetchedCart = (data) => {
+    cartItems.set(data)
+}
+
 // // Add product to cartItems
 // export const addToCart = (data) => {
 //     console.log("data", data.id);

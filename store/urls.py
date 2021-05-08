@@ -4,7 +4,16 @@ from . import views
 
 
 urlpatterns = [
+    path("register-user/", views.registerUser, name='registerUser'),
+    path("login-user/", views.loginUser, name='loginUser'),
+    path("logout-user/", views.logoutUser, name='logoutUser'),
+
+    path("checkout/", views.checkout, name='checkout'),
+
     path("listproducts/", views.ListProducts.as_view(), name='listproducts'),
-    path("createproducts/", views.CreateProduct.as_view(), name='createproduct'),
-    path("rudproducts/<int:pk>", views.RUDProduct.as_view(), name='rudproduct'),
+    path("getcart/<int:pk>", views.getCart, name='getcart'),
+    path("additem/", views.addItem, name='additem'),
+    path("updateitem/", views.updateItem, name='updateitem'),
+    path("removeitem/", views.removeItem, name='removeitem'),
+    # path("rudcart/<int:pk>", views.RUDCart.as_view(), name='rudcart'),
 ]
