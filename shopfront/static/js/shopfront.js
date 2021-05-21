@@ -1,7 +1,18 @@
 let showAuthModal = false;
 
-let authModal = document.getElementById('auth-modal');
-let authFormReel = document.getElementById('auth-form-reel');
+const authModal = document.getElementById('auth-modal');
+const authFormReel = document.getElementById('auth-form-reel');
+
+const cartInput = document.getElementsByName('ls-cart')
+const lsCheck = localStorage.getItem('sf-ct')
+let lsCartItems = '[]'
+if (lsCheck) {
+    lsCartItems = JSON.stringify(JSON.parse(lsCheck).map(x => ({id: x.product.id, qty: x.quantity})))
+}
+for (let i = 0; i < cartInput.length; i++) {
+    cartInput[i].value = lsCartItems;
+}
+console.log(lsCartItems);
 
 function toggleAuthModal(isReg) {
     if(isReg === 'R') {
@@ -13,6 +24,8 @@ function toggleAuthModal(isReg) {
     authModal.classList.toggle("invisible")
     showAuthModal = !showAuthModal;
 }
+
+
 
 // let regForm = document.getElementById("reg-form");
 // let loginForm = document.getElementById("login-form");

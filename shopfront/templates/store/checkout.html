@@ -2,14 +2,41 @@
 
 {% load static %}
 
+{# block extra_meta #}
+<!-- <script>
+    let user = "{{ request.user }}";
+
+    function getToken(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                // Does this cookie string begin with the name we want?
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    const csrftoken = getToken('csrftoken');
+</script> -->
+{# endblock #}
 
 {% block content %}
 
 <div class="min-h-fit text-center">
     <h1 class="text-grey-900 text-center text-2xl font-bold">Checkout</h1>
 
-    <div class="inline-block bg-white w-full max-w-hd shadow-md align-top p-4 rounded-md">
-        <h1 class="text-grey-700 text-left text-2xl">Order Summary</h1>
+    <div class="inline-block bg-white w-full max-w-hd shadow-md align-top p-4 rounded-md my-4 mx-auto">
+        <div class="text-left">
+            <a href="/store" class="btn-w btn-m text-sm"><i class="fas fa-arrow-left"></i> Back to Store</a>
+        </div>
+        <h1 class="text-grey-600 text-left text-lg">Order Summary</h1>
+        
+        {% if user.is_authenticated %}
         {% for item in items %}
         <div class="relative md:text-left tx0 border-b border-grey-300 py-2 last:border-none">
             <div class="inline-block w-52 text-base align-middle md:w-5/6">
@@ -36,66 +63,189 @@
         <p class="text-right text-grey-500">Total Amount Payable
             <span class="text-2xl w-32 inline-block">&#8377;<span class="font-bold text-grey-900">{{order.get_cart_total}}</span></span>
         </p>
+        {% else %}
+        <p class="text-grey-600 py-12">Login to continue</p>
+        {% endif %}
     </div>
 
+    
 
-    <div class="bg-white inline-block rounded-md shadow-md py-4 my-8 align-top">
-        <form method="POST" action="" class="inline-block text-left px-4">
+    <div id="checkout-form" class="bg-white rounded-md shadow-md py-4 my-4 align-top relative {% if customer %}hidden{% else %}inline-block{% endif %}">
+        <form id="checkout-form" method="POST" class="inline-block text-left px-4">
             {% csrf_token %}
-            <h2 class="text-center text-lg text-grey-700 py-1">Billing Details</h2>
-            <div class="inline-block w-40">
-                <label class="form-label" for="email">First Name</label>
-                <input class="form-input" type="text" name="fname" required>
+            <h2 class="text-center text-lg text-grey-700 py-1">Shipping Details</h2>
+            <!-- <div class="inline-block w-40">
+                <label class="form-label" for="fname">First Name<b>*</b></label>
+                <input class="form-input co-input" type="text" name="fname" required>
             </div>
             <div class="inline-block w-40">
-                <label class="form-label" for="email">Last Name</label>
-                <input class="form-input" type="text" name="lname" required>
+                <label class="form-label" for="lname">Last Name<b>*</b></label>
+                <input class="form-input co-input" type="text" name="lname" required>
             </div>
 
-            <h3 class="mt-4 -mb-3 text-grey-500 text-sm">Shipping Information:</h3>
+            <h3 class="mt-4 -mb-3 text-grey-500 text-sm">Shipping Information:</h3> -->
 
             <div class="inline-block w-80">
-                <label class="form-label" for="email"><b>Address 1*</b></label>
-                <input class="form-input" type="text" name="address1" required>
+                <label class="form-label" for="company">Company Name</label>
+                <input class="form-input co-input" type="text" name="company"
+                {% if customer.company %}
+                value="{{customer.company}}"
+                {% endif %}
+                >
             </div>
             <br>
             <div class="inline-block w-80">
-                <label class="form-label" for="email">Address 2 (Optional)</label>
-                <input class="form-input" type="text" name="address2">
+                <label class="form-label" for="address1">Address 1<b>*</b></label>
+                <input class="form-input co-input" type="text" name="address1" required
+                {% if customer.address1 %}
+                value="{{customer.address1}}"
+                {% endif %}
+                >
+            </div>
+            <br>
+            <div class="inline-block w-80">
+                <label class="form-label" for="address2">Address 2 (Optional)</label>
+                <input class="form-input co-input" type="text" name="address2"
+                {% if customer.address2 %}
+                value="{{customer.address2}}"
+                {% endif %}
+                >
             </div>
             <br>
 
             <div class="inline-block w-56">
-                <label class="form-label" for="email"><b>City*</b></label>
-                <input class="form-input" type="text" name="city" required>
+                <label class="form-label" for="email">City<b>*</b></label>
+                <input class="form-input co-input" type="text" name="city" required
+                {% if customer.city %}
+                value="{{customer.city}}"
+                {% endif %}
+                >
             </div>
 
             <div class="inline-block w-24">
-                <label class="form-label" for="email"><b>Pincode*</b></label>
-                <input class="form-input" type="number" name="pincode" required>
+                <label class="form-label" for="pincode">Pincode<b>*</b></label>
+                <input class="form-input co-input" type="number" name="pincode" required
+                {% if customer.pincode %}
+                value="{{customer.pincode}}"
+                {% endif %}
+                >
             </div>
             <br>
 
             <div class="inline-block w-40">
-                <label class="form-label" for="email">State</label>
-                <input class="form-input" type="text" name="state">
+                <label class="form-label" for="state">State</label>
+                <input class="form-input co-input" type="text" name="state"
+                {% if customer.state %}
+                value="{{customer.state}}"
+                {% endif %}
+                >
             </div>
 
             <div class="inline-block w-40">
-                <label class="form-label" for="email">Country</label>
-                <input class="form-input" type="text" name="country">
+                <label class="form-label" for="country">Country</label>
+                <input class="form-input co-input" type="text" name="country"
+                {% if customer.country %}
+                value="{{customer.country}}"
+                {% endif %}
+                >
             </div>
             <br>
 
-            <button type="submit" class="mt-4 w-80 text-lg btn-p btn-m">Save</button>
+            <button id="checkout-btn" type="submit" class="mt-4 w-80 text-lg btn-p btn-m">
+                <i class="fas fa-clipboard-check"></i>
+                Confirm Billing Details
+            </button>
         </form>
+
+        {% if user.is_authenticated == False %}
+        <div class="absolute top-0 left-0 rounded-md bg-white bg-opacity-80 h-full w-full">
+            <div class="bg-white rounded-md p-3 w-2/3 mx-auto my-28 border border-info-400 shadow-md">
+                <p class="text-grey-600 text-sm">Login or register to continue</p>
+
+                <button class="btn-m btn-p w-2/3 my-4" onclick="toggleAuthModal('L')">Login</button>
+                <br>
+                <button class="btn-m btn-a w-2/3" onclick="toggleAuthModal('R')">Sign Up</button>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
+    {% if customer %}
+    <div id="checkout-display" class="bg-white inline-block rounded-md shadow-md p-4 my-4 align-top">
+        <h2 class="text-center text-lg text-grey-700 py-1">Shipping Details</h2>
+                {% if customer.company %}
+                    <p class="text-grey-600 text-left">{{customer.company}}</p>
+                {% endif %}
 
-    <div class="bg-white rounded-md shadow-md py-4 hidden align-top">
+                <p class="text-grey-600 text-left w-80">{{customer.address1}}</p>
+
+                {% if customer.address2 %}
+                    <p class="text-grey-600 text-left">{{customer.address2}}</p>
+                {% endif %}
+
+                <p class="text-grey-600 text-left">{{customer.city}} - {{customer.pincode}}</p>
+
+                <p class="text-grey-600 text-left">
+                {% if customer.state %}{{customer.state}}{% endif %}
+                {% if customer.country %}{{customer.country}}{% endif %}
+                </p>
+
+                <button class="btn-w btn-m text-sm" onclick="showShippingForm()">Edit Details</button>
+    </div>
+    
+    
+    <section id="payment-sect" class="bg-white rounded-md shadow-md p-4 my-8 mx-2 inline-block align-top">
         <h2>Make Payment</h2>
-    </div>
+        <a href="{% url 'processorder' %}" class="btn-p btn-m" onclick="showShippingForm()">Make Payment</a>
+    </section>
+    {% endif %}
 
 </div>
 
+{% endblock %}
+
+{% block extra_js %}
+
+<script>
+    const showShippingForm = () => {
+        document.getElementById("checkout-display").classList.add("hidden");
+        document.getElementById("checkout-form").classList.remove("hidden");
+        document.getElementById("checkout-form").classList.add("inline-block");
+        document.getElementById("payment-sect").classList.add("hidden")
+        document.getElementById("payment-sect").classList.remove("inline-block")
+    };
+
+    // let coForm = document.getElementById("checkout-form");
+    // let coFormInputs = document.getElementsByClassName("co-input")
+
+    // coForm.addEventListener('submit', (e) => {
+    //     e.preventDefault();
+        
+    //     console.log('Form submitted');
+    //     addCustomerData()
+    //     document.getElementById("checkout-btn").classList.add("hidden")
+    //     document.getElementById("payment-sect").classList.remove("hidden")
+    //     document.getElementById("payment-sect").classList.add("inline-block")
+    //     for (let i = 0; i < coFormInputs.length; i++) {
+    //         coFormInputs[i].classList.add('input-ro')
+    //         coFormInputs[i].classList.remove('form-input')
+    //     }
+    // })
+
+    // const addCustomerData = () => {
+    //     let customerData = {
+    //         user: user,
+    //         company: coForm.company.value,
+    //         address1: coForm.address1.value,
+    //         address2: coForm.address2.value,
+    //         city: coForm.city.value,
+    //         pincode: coForm.pincode.value,
+    //         state: coForm.state.value,
+    //         country: coForm.country.value,
+    //     }
+
+    //     console.log(customerData);
+    // }
+
+</script>
 {% endblock %}

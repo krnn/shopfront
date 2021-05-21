@@ -15,5 +15,10 @@
 }
 
 .form-input {
-    @apply border-b-2 w-full px-1.5 pt-1 rounded-t-md outline-none bg-primary-50 border-info-500 focus:border-primary-700;
+    @apply border-b-2 w-full px-1.5 pt-1 rounded-t-md focus:outline-none bg-primary-50 border-info-500 focus:border-primary-700;
+}
+
+.input-ro {
+    @apply w-full block px-1.5 pt-1 bg-grey-100 rounded-md focus:outline-none text-grey-800;
+    pointer-events:none;
 }

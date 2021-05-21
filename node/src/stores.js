@@ -1,4 +1,5 @@
 import { writable, derived } from 'svelte/store';
+import {persistCart} from './persistCart'
 
 export const baseURL = 'http://localhost:8000/api/';
 
@@ -22,11 +23,12 @@ export const setFetchedProducts = (data) => {
 }
 
 // Cart items
-export const cartItems = writable([]);
+export const cartItems = persistCart();
 
 // Populate cart if exists in database
 export const setFetchedCart = (data) => {
     cartItems.set(data)
+    console.log(data);
 }
 
 // // Add product to cartItems

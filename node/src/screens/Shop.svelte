@@ -1,12 +1,21 @@
 <script>
     import { filteredProducts, nameF, cartItems } from '../stores.js';
 	import ProductTile from './ProductTile.svelte';
+	import ProductDetailModal from './ProductDetailModal.svelte';
     import { addItem } from '../service.js';
-
+    
+    let selectedProduct = null
+    const setSelectedProduct = (prod) => {
+        selectedProduct = prod
+    }
     let nameTerm = '';
 
     const addToCart = async(data) => {
-        let iId = await addItem(data);
+        let item = {};
+        item.id = data.id;
+        item.moq = data.moq;
+        
+        let iId = await addItem(item, 1);
         for (let i = 0; i < $cartItems.length; i++) {
             if ($cartItems[i].product.id === data.id) {
                 $cartItems[i].quantity++;
@@ -33,6 +42,10 @@
 
 <div class="store-grid">
     {#each $filteredProducts as product}
-        <ProductTile {product} {addToCart}/>
+        <ProductTile {product} {addToCart} {setSelectedProduct}/>
     {/each}
 </div>
+
+{#if selectedProduct}
+<ProductDetailModal product={selectedProduct} {setSelectedProduct}/>
+{/if}

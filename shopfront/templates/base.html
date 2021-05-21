@@ -97,8 +97,18 @@
 
     </header>
 
-
+    
     <main class="pt-14">
+        {% if messages %}
+        <ul class="w-full">
+            {% for message in messages %}
+            <li class="{% if message.tags %}bg-{{ message.tags }}-200 text-{{ message.tags }}-600{% endif %} text-center px-4 py-2">
+                {{ message }}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 
@@ -190,6 +200,8 @@
                     <label class="form-label" for="password2">Retype Password</label>
                     <input class="text-lg form-input" id="r-password2" type="password" name="password2" required>
         
+                    <input type="hidden" name="ls-cart" id="ls-cart-r">
+
                     <button type="submit" class="mt-4 w-full text-lg btn-a btn-m">Register</button>
                 </form>
 
@@ -201,6 +213,8 @@
                     <input class="text-lg form-input" type="email" id="l-email" name="username" required>
                     <label class="form-label" for="password">Password</label>
                     <input class="text-lg form-input" type="password" id="l-password" name="password" required>
+        
+                    <input type="hidden" name="ls-cart" id="ls-cart-l">
         
                     <button type="submit" class="mt-4 w-full text-lg btn-p btn-m">Login</button>
                 </form>

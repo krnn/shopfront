@@ -1,4 +1,8 @@
+import datetime
+import json
+
 from django.shortcuts import render
+from django.contrib import messages
 from rest_framework import generics
 # from rest_framework.permissions import IsAdminUser
 from django.contrib.auth import authenticate, login, logout
@@ -22,24 +26,53 @@ def registerUser(request):
     user = User.objects.create_user(username, username, password)
 
     login(request, user)
+
+    lsCart = json.loads(request.POST['ls-cart'])
+    if len(lsCart) > 0:
+                order, createdO = Order.objects.get_or_create(user=user, complete=False)
+                if createdO:
+                    for item in lsCart:
+                        product = Product.objects.get(id=item['id'])
+                        orderItem, createdI = OrderItem.objects.get_or_create(order=order, product=product)
+                        if createdI:
+                            if int(item['qty']) > product.moq:
+                                orderItem.quantity = int(item['qty'])
+                            else:
+                                orderItem.quantity = product.moq
+                            orderItem.save()
     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
 
 def loginUser(request):
     username = request.POST['username']
     password = request.POST['password']
+    lsCart = json.loads(request.POST['ls-cart'])
+
     user = authenticate(request, username=username, password=password)
-    response_data = {}
+
     if user is not None:
         if user.is_active:
             login(request, user)
-            response_data['result'] = 'success'
+            messages.success(request, f"Successufully logged in as {username}")
+
+            if len(lsCart) > 0:
+                order, createdO = Order.objects.get_or_create(user=user, complete=False)
+                if createdO:
+                    for item in lsCart:
+                        product = Product.objects.get(id=item['id'])
+                        orderItem, createdI = OrderItem.objects.get_or_create(order=order, product=product)
+                        if createdI:
+                            if int(item['qty']) > product.moq:
+                                orderItem.quantity = int(item['qty'])
+                            else:
+                                orderItem.quantity = product.moq
+                            orderItem.save()
         else:
+            messages.error(request, "Inactive User")
             return HttpResponse("Inactive user.")
     else:
-        response_data['result'] = 'fail'
+        messages.error(request, "Login error: incorrect email or password. Please try again.")
 
-    # return HttpResponse(json.dumps(response_data), content_type="application/json")
     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
 
@@ -57,22 +90,52 @@ def logoutUser(request):
 """
 def checkout(request):
     if request.user.is_authenticated:
-        customer = request.user.customer
-        order, created = Order.objects.get_or_create(customer=customer, complete=False)
+        if request.method == 'POST':
+            data = request.POST
+            try:
+                ShippingAddress.objects.filter(user=request.user).update(
+                    company=data["company"],
+                    address1=data["address1"],
+                    address2=data["address2"],
+                    city=data["city"],
+                    pincode=data["pincode"],
+                    state=data["state"],
+                    country=data["country"]
+                )
+                
+            except ShippingAddress.DoesNotExist:
+                newAddress = ShippingAddress(
+                    user=request.user,
+                    company=data["company"],
+                    address1=data["address1"],
+                    address2=data["address2"],
+                    city=data["city"],
+                    pincode=data["pincode"],
+                    state=data["state"],
+                    country=data["country"]
+                )
+                newAddress.save()
+
+        user = request.user
+        order, created = Order.objects.get_or_create(user=user, complete=False)
         items = order.items.all()
+        try:
+            shipping = ShippingAddress.objects.get(id=user.id)
+        except ShippingAddress.DoesNotExist:
+            shipping = False
     else:
         items = []
         order = {"get_cart_total": 0, "get_cart_items": 0}
+        shipping = False
 
-    context = {"items": items, "order": order}
+    context = {"items": items, "order": order, "customer": shipping}
     return render(request, 'store/checkout.html', context)
 
 
 
-
-"""                 //////////////////\\\\\\\\\\\\\\\\\\
-                   (||||||||||||[[( APIs )]]||||||||||||)
-                    \\\\\\\\\\\\\\\\\\//////////////////
+"""                 ///////////////// \\\\\\\\\\\\\\\\\
+                   (||||||||||||[[( API )]]||||||||||||)
+                    \\\\\\\\\\\\\\\\\ /////////////////
 """
 
 class ListProducts(generics.ListAPIView):
@@ -93,30 +156,39 @@ class ListProducts(generics.ListAPIView):
 #     queryset = Customer.objects.all()
 #     serializer_class = CartSerializer
 
+# @api_view(['GET'])
+# def getProductInfo(request, pk):
+
 @api_view(['GET'])
 def getCart(request, pk):
     try:
-        cart = Order.objects.filter(customer=pk).get(complete=False)
+        cart = Order.objects.filter(user=pk).get(complete=False)
         serializer = OrderSerializer(cart)
         return Response(serializer.data)
     except Order.DoesNotExist:
         return JsonResponse({'items':[]}, safe=False)
 
+
 @api_view(['POST'])
 def addItem(request):
-    customerId = request.data["userId"]
+    userId = request.data["userId"]
     productId = request.data["id"]
+    # moq = request.data["moq"]
+    addValue = request.data["n"]
 
     product = Product.objects.get(id=productId)
-    customer = Customer.objects.get(id=customerId)
+    user = User.objects.get(id=userId)
     
-    order, _ = Order.objects.get_or_create(customer=customer, complete=False)
+    order, createdO = Order.objects.get_or_create(user=user, complete=False)
 
     orderItem, createdI = OrderItem.objects.get_or_create(order=order, product=product)
     if createdI:
-        orderItem.quantity = request.data["moq"]
+        if addValue > product.moq:
+            orderItem.quantity = addValue
+        else:
+            orderItem.quantity = product.moq
     else:
-        orderItem.quantity = orderItem.quantity + 1
+        orderItem.quantity = orderItem.quantity + addValue
     
     orderItem.save()
 
@@ -126,14 +198,13 @@ def addItem(request):
 
 @api_view(['POST'])
 def updateItem(request):
-    customerId = request.data["userId"]
+    userId = request.data["userId"]
     itemId = request.data["itemId"]
     newValue = request.data["n"]
 
     orderItem = OrderItem.objects.get(id=itemId)
-    order = Order.objects.get(id=orderItem.order.id)
 
-    if order.complete == False and int(customerId) == order.customer.id:
+    if orderItem.order.complete == False and int(userId) == orderItem.order.user.id:
         orderItem.quantity = newValue
         orderItem.save()
         return JsonResponse({"quantity": orderItem.quantity})
@@ -143,14 +214,29 @@ def updateItem(request):
 
 @api_view(['POST'])
 def removeItem(request):
-    customerId = request.data["userId"]
+    userId = request.data["userId"]
     itemId = request.data["itemId"]
 
     orderItem = OrderItem.objects.get(id=itemId)
     order = Order.objects.get(id=orderItem.order.id)
 
-    if order.complete == False and int(customerId) == order.customer.id:
+    if order.complete == False and int(userId) == order.user.id:
         orderItem.delete()
         return JsonResponse("Removed", safe=False)
 
     return JsonResponse("error in removeItem", safe=False)
+
+
+def processOrder(request):
+    transaction_id = datetime.datetime.now().timestamp()
+    data = request.POST
+
+    if request.user.is_authenticated:
+        user = request.user.user
+        order = Order.objects.get(user=user, complete=False)
+        
+        order.transaction_id = transaction_id
+        order.complete = True
+        order.save()
+        
+    return JsonResponse('Payment Complete', safe=False)

@@ -5,9 +5,9 @@ from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel
 from wagtail.images.edit_handlers import ImageChooserPanel
 
 
-class Customer(models.Model):
+class ShippingAddress(models.Model):
     user        = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
-    company     = models.CharField(max_length=100)
+    company     = models.CharField(max_length=100, blank=True, null=True)
     address1    = models.CharField(max_length=100, blank=False, null=True)
     address2    = models.CharField(max_length=100, blank=True, null=True)
     city        = models.CharField(max_length=30, blank=False, null=True)
@@ -61,6 +61,7 @@ class Product(models.Model):
             FieldPanel('units'),
             FieldPanel('quantity_available'),
             FieldPanel('moq', heading='Minimum Order Quantity'),
+            FieldPanel('product_images'),
         ]),
     ]
 
@@ -68,8 +69,14 @@ class Product(models.Model):
         return self.name
 
 
+class ProductImage(models.Model):
+    product     = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="product_images")
+    image       = models.ForeignKey("wagtailimages.Image",
+        null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+
 class Order(models.Model):
-    customer    = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name="cart")
+    user    = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="cart")
     order_date  = models.DateTimeField(auto_now_add=True)
     complete    = models.BooleanField(default=False)
     transaction_id  = models.CharField(max_length=100, null=True, blank=True)

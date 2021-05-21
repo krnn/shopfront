@@ -16,4 +16,6 @@ urlpatterns = [
     path("updateitem/", views.updateItem, name='updateitem'),
     path("removeitem/", views.removeItem, name='removeitem'),
     # path("rudcart/<int:pk>", views.RUDCart.as_view(), name='rudcart'),
+
+    path("processorder/", views.processOrder, name='processorder'),
 ]

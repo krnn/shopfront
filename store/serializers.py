@@ -2,6 +2,18 @@ from rest_framework.serializers import ModelSerializer, ReadOnlyField
 from .models import *
 
 
+class ProductInfoSerializer(ModelSerializer):
+    image_url = ReadOnlyField()
+
+    class Meta:
+        model = Product
+        fields = (
+            "desctiption",
+            "images",
+            # "video"
+        )
+
+
 class ProductSerializer(ModelSerializer):
     image_url = ReadOnlyField()
 
@@ -10,7 +22,22 @@ class ProductSerializer(ModelSerializer):
         fields = (
             "id",
             "name",
-            # "description",
+            # Add searchable properties here
+            "price",
+            "image_url",
+            "units",
+            "moq",
+        )
+
+
+class CartProductSerializer(ModelSerializer):
+    image_url = ReadOnlyField()
+
+    class Meta:
+        model = Product
+        fields = (
+            "id",
+            "name",
             "price",
             "image_url",
             "units",
@@ -19,7 +46,7 @@ class ProductSerializer(ModelSerializer):
 
 
 class OrderItemSerializer(ModelSerializer):
-    product = ProductSerializer(read_only=True)
+    product = CartProductSerializer(read_only=True)
 
     class Meta:
         model = OrderItem
@@ -38,7 +65,7 @@ class CartSerializer(ModelSerializer):
     cart = OrderSerializer(many=True, read_only=True)
 
     class Meta:
-        model = Customer
+        model = ShippingAddress
         fields = "__all__"
         # depth = 1
 

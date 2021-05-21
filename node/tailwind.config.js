@@ -18,7 +18,7 @@ module.exports = {
     grey: colors.coolGray,
     primary: colors.indigo,
     accent: colors.orange,
-    danger: colors.red,
+    error: colors.red,
     success: colors.emerald,
     info: colors.cyan,
     },
