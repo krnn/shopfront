@@ -5,6 +5,12 @@ var app = (function () {
 
     function noop() { }
     const identity = x => x;
+    function assign(tar, src) {
+        // @ts-ignore
+        for (const k in src)
+            tar[k] = src[k];
+        return tar;
+    }
     function add_location(element, file, line, column, char) {
         element.__svelte_meta = {
             loc: { file, line, column, char }
@@ -46,6 +52,9 @@ var app = (function () {
     function set_store_value(store, ret, value = ret) {
         store.set(value);
         return ret;
+    }
+    function action_destroyer(action_result) {
+        return action_result && is_function(action_result.destroy) ? action_result.destroy : noop;
     }
 
     const is_client = typeof window !== 'undefined';
@@ -117,9 +126,9 @@ var app = (function () {
         node.addEventListener(event, handler, options);
         return () => node.removeEventListener(event, handler, options);
     }
-    function stop_propagation(fn) {
+    function prevent_default(fn) {
         return function (event) {
-            event.stopPropagation();
+            event.preventDefault();
             // @ts-ignore
             return fn.call(this, event);
         };
@@ -221,6 +230,23 @@ var app = (function () {
     function onMount(fn) {
         get_current_component().$$.on_mount.push(fn);
     }
+    function afterUpdate(fn) {
+        get_current_component().$$.after_update.push(fn);
+    }
+    function createEventDispatcher() {
+        const component = get_current_component();
+        return (type, detail) => {
+            const callbacks = component.$$.callbacks[type];
+            if (callbacks) {
+                // TODO are there situations where events could be dispatched
+                // in a server (non-DOM) environment?
+                const event = custom_event(type, detail);
+                callbacks.slice().forEach(fn => {
+                    fn.call(component, event);
+                });
+            }
+        };
+    }
     // TODO figure out if we still want to support
     // shorthand events, or if we want to implement
     // a real bubbling mechanism
@@ -242,6 +268,10 @@ var app = (function () {
             update_scheduled = true;
             resolved_promise.then(flush);
         }
+    }
+    function tick() {
+        schedule_update();
+        return resolved_promise;
     }
     function add_render_callback(fn) {
         render_callbacks.push(fn);
@@ -451,6 +481,12 @@ var app = (function () {
             }
         };
     }
+
+    const globals = (typeof window !== 'undefined'
+        ? window
+        : typeof globalThis !== 'undefined'
+            ? globalThis
+            : global);
     function outro_and_destroy_block(block, lookup) {
         transition_out(block, 1, 1, () => {
             lookup.delete(block.key);
@@ -540,6 +576,43 @@ var app = (function () {
             }
             keys.add(key);
         }
+    }
+
+    function get_spread_update(levels, updates) {
+        const update = {};
+        const to_null_out = {};
+        const accounted_for = { $$scope: 1 };
+        let i = levels.length;
+        while (i--) {
+            const o = levels[i];
+            const n = updates[i];
+            if (n) {
+                for (const key in o) {
+                    if (!(key in n))
+                        to_null_out[key] = 1;
+                }
+                for (const key in n) {
+                    if (!accounted_for[key]) {
+                        update[key] = n[key];
+                        accounted_for[key] = 1;
+                    }
+                }
+                levels[i] = n;
+            }
+            else {
+                for (const key in o) {
+                    accounted_for[key] = 1;
+                }
+            }
+        }
+        for (const key in to_null_out) {
+            if (!(key in update))
+                update[key] = undefined;
+        }
+        return update;
+    }
+    function get_spread_object(spread_props) {
+        return typeof spread_props === 'object' && spread_props !== null ? spread_props : {};
     }
     function create_component(block) {
         block && block.c();
@@ -750,6 +823,98 @@ var app = (function () {
         $inject_state() { }
     }
 
+    /**
+     * @typedef {Object} WrappedComponent Object returned by the `wrap` method
+     * @property {SvelteComponent} component - Component to load (this is always asynchronous)
+     * @property {RoutePrecondition[]} [conditions] - Route pre-conditions to validate
+     * @property {Object} [props] - Optional dictionary of static props
+     * @property {Object} [userData] - Optional user data dictionary
+     * @property {bool} _sveltesparouter - Internal flag; always set to true
+     */
+
+    /**
+     * @callback AsyncSvelteComponent
+     * @returns {Promise<SvelteComponent>} Returns a Promise that resolves with a Svelte component
+     */
+
+    /**
+     * @callback RoutePrecondition
+     * @param {RouteDetail} detail - Route detail object
+     * @returns {boolean|Promise<boolean>} If the callback returns a false-y value, it's interpreted as the precondition failed, so it aborts loading the component (and won't process other pre-condition callbacks)
+     */
+
+    /**
+     * @typedef {Object} WrapOptions Options object for the call to `wrap`
+     * @property {SvelteComponent} [component] - Svelte component to load (this is incompatible with `asyncComponent`)
+     * @property {AsyncSvelteComponent} [asyncComponent] - Function that returns a Promise that fulfills with a Svelte component (e.g. `{asyncComponent: () => import('Foo.svelte')}`)
+     * @property {SvelteComponent} [loadingComponent] - Svelte component to be displayed while the async route is loading (as a placeholder); when unset or false-y, no component is shown while component
+     * @property {object} [loadingParams] - Optional dictionary passed to the `loadingComponent` component as params (for an exported prop called `params`)
+     * @property {object} [userData] - Optional object that will be passed to events such as `routeLoading`, `routeLoaded`, `conditionsFailed`
+     * @property {object} [props] - Optional key-value dictionary of static props that will be passed to the component. The props are expanded with {...props}, so the key in the dictionary becomes the name of the prop.
+     * @property {RoutePrecondition[]|RoutePrecondition} [conditions] - Route pre-conditions to add, which will be executed in order
+     */
+
+    /**
+     * Wraps a component to enable multiple capabilities:
+     * 1. Using dynamically-imported component, with (e.g. `{asyncComponent: () => import('Foo.svelte')}`), which also allows bundlers to do code-splitting.
+     * 2. Adding route pre-conditions (e.g. `{conditions: [...]}`)
+     * 3. Adding static props that are passed to the component
+     * 4. Adding custom userData, which is passed to route events (e.g. route loaded events) or to route pre-conditions (e.g. `{userData: {foo: 'bar}}`)
+     * 
+     * @param {WrapOptions} args - Arguments object
+     * @returns {WrappedComponent} Wrapped component
+     */
+    function wrap$1(args) {
+        if (!args) {
+            throw Error('Parameter args is required')
+        }
+
+        // We need to have one and only one of component and asyncComponent
+        // This does a "XNOR"
+        if (!args.component == !args.asyncComponent) {
+            throw Error('One and only one of component and asyncComponent is required')
+        }
+
+        // If the component is not async, wrap it into a function returning a Promise
+        if (args.component) {
+            args.asyncComponent = () => Promise.resolve(args.component);
+        }
+
+        // Parameter asyncComponent and each item of conditions must be functions
+        if (typeof args.asyncComponent != 'function') {
+            throw Error('Parameter asyncComponent must be a function')
+        }
+        if (args.conditions) {
+            // Ensure it's an array
+            if (!Array.isArray(args.conditions)) {
+                args.conditions = [args.conditions];
+            }
+            for (let i = 0; i < args.conditions.length; i++) {
+                if (!args.conditions[i] || typeof args.conditions[i] != 'function') {
+                    throw Error('Invalid parameter conditions[' + i + ']')
+                }
+            }
+        }
+
+        // Check if we have a placeholder component
+        if (args.loadingComponent) {
+            args.asyncComponent.loading = args.loadingComponent;
+            args.asyncComponent.loadingParams = args.loadingParams || undefined;
+        }
+
+        // Returns an object that contains all the functions to execute too
+        // The _sveltesparouter flag is to confirm the object was created by this router
+        const obj = {
+            component: args.asyncComponent,
+            userData: args.userData,
+            conditions: (args.conditions && args.conditions.length) ? args.conditions : undefined,
+            props: (args.props && Object.keys(args.props).length) ? args.props : {},
+            _sveltesparouter: true
+        };
+
+        return obj
+    }
+
     const subscriber_queue = [];
     /**
      * Creates a `Readable` store that allows reading by subscription.
@@ -853,6 +1018,900 @@ var app = (function () {
         });
     }
 
+    function regexparam (str, loose) {
+    	if (str instanceof RegExp) return { keys:false, pattern:str };
+    	var c, o, tmp, ext, keys=[], pattern='', arr = str.split('/');
+    	arr[0] || arr.shift();
+
+    	while (tmp = arr.shift()) {
+    		c = tmp[0];
+    		if (c === '*') {
+    			keys.push('wild');
+    			pattern += '/(.*)';
+    		} else if (c === ':') {
+    			o = tmp.indexOf('?', 1);
+    			ext = tmp.indexOf('.', 1);
+    			keys.push( tmp.substring(1, !!~o ? o : !!~ext ? ext : tmp.length) );
+    			pattern += !!~o && !~ext ? '(?:/([^/]+?))?' : '/([^/]+?)';
+    			if (!!~ext) pattern += (!!~o ? '?' : '') + '\\' + tmp.substring(ext);
+    		} else {
+    			pattern += '/' + tmp;
+    		}
+    	}
+
+    	return {
+    		keys: keys,
+    		pattern: new RegExp('^' + pattern + (loose ? '(?=$|\/)' : '\/?$'), 'i')
+    	};
+    }
+
+    /* node_modules/svelte-spa-router/Router.svelte generated by Svelte v3.37.0 */
+
+    const { Error: Error_1, Object: Object_1, console: console_1$1 } = globals;
+
+    // (209:0) {:else}
+    function create_else_block$1(ctx) {
+    	let switch_instance;
+    	let switch_instance_anchor;
+    	let current;
+    	const switch_instance_spread_levels = [/*props*/ ctx[2]];
+    	var switch_value = /*component*/ ctx[0];
+
+    	function switch_props(ctx) {
+    		let switch_instance_props = {};
+
+    		for (let i = 0; i < switch_instance_spread_levels.length; i += 1) {
+    			switch_instance_props = assign(switch_instance_props, switch_instance_spread_levels[i]);
+    		}
+
+    		return {
+    			props: switch_instance_props,
+    			$$inline: true
+    		};
+    	}
+
+    	if (switch_value) {
+    		switch_instance = new switch_value(switch_props());
+    		switch_instance.$on("routeEvent", /*routeEvent_handler_1*/ ctx[7]);
+    	}
+
+    	const block = {
+    		c: function create() {
+    			if (switch_instance) create_component(switch_instance.$$.fragment);
+    			switch_instance_anchor = empty();
+    		},
+    		m: function mount(target, anchor) {
+    			if (switch_instance) {
+    				mount_component(switch_instance, target, anchor);
+    			}
+
+    			insert_dev(target, switch_instance_anchor, anchor);
+    			current = true;
+    		},
+    		p: function update(ctx, dirty) {
+    			const switch_instance_changes = (dirty & /*props*/ 4)
+    			? get_spread_update(switch_instance_spread_levels, [get_spread_object(/*props*/ ctx[2])])
+    			: {};
+
+    			if (switch_value !== (switch_value = /*component*/ ctx[0])) {
+    				if (switch_instance) {
+    					group_outros();
+    					const old_component = switch_instance;
+
+    					transition_out(old_component.$$.fragment, 1, 0, () => {
+    						destroy_component(old_component, 1);
+    					});
+
+    					check_outros();
+    				}
+
+    				if (switch_value) {
+    					switch_instance = new switch_value(switch_props());
+    					switch_instance.$on("routeEvent", /*routeEvent_handler_1*/ ctx[7]);
+    					create_component(switch_instance.$$.fragment);
+    					transition_in(switch_instance.$$.fragment, 1);
+    					mount_component(switch_instance, switch_instance_anchor.parentNode, switch_instance_anchor);
+    				} else {
+    					switch_instance = null;
+    				}
+    			} else if (switch_value) {
+    				switch_instance.$set(switch_instance_changes);
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			if (switch_instance) transition_in(switch_instance.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			if (switch_instance) transition_out(switch_instance.$$.fragment, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(switch_instance_anchor);
+    			if (switch_instance) destroy_component(switch_instance, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_else_block$1.name,
+    		type: "else",
+    		source: "(209:0) {:else}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    // (202:0) {#if componentParams}
+    function create_if_block$3(ctx) {
+    	let switch_instance;
+    	let switch_instance_anchor;
+    	let current;
+    	const switch_instance_spread_levels = [{ params: /*componentParams*/ ctx[1] }, /*props*/ ctx[2]];
+    	var switch_value = /*component*/ ctx[0];
+
+    	function switch_props(ctx) {
+    		let switch_instance_props = {};
+
+    		for (let i = 0; i < switch_instance_spread_levels.length; i += 1) {
+    			switch_instance_props = assign(switch_instance_props, switch_instance_spread_levels[i]);
+    		}
+
+    		return {
+    			props: switch_instance_props,
+    			$$inline: true
+    		};
+    	}
+
+    	if (switch_value) {
+    		switch_instance = new switch_value(switch_props());
+    		switch_instance.$on("routeEvent", /*routeEvent_handler*/ ctx[6]);
+    	}
+
+    	const block = {
+    		c: function create() {
+    			if (switch_instance) create_component(switch_instance.$$.fragment);
+    			switch_instance_anchor = empty();
+    		},
+    		m: function mount(target, anchor) {
+    			if (switch_instance) {
+    				mount_component(switch_instance, target, anchor);
+    			}
+
+    			insert_dev(target, switch_instance_anchor, anchor);
+    			current = true;
+    		},
+    		p: function update(ctx, dirty) {
+    			const switch_instance_changes = (dirty & /*componentParams, props*/ 6)
+    			? get_spread_update(switch_instance_spread_levels, [
+    					dirty & /*componentParams*/ 2 && { params: /*componentParams*/ ctx[1] },
+    					dirty & /*props*/ 4 && get_spread_object(/*props*/ ctx[2])
+    				])
+    			: {};
+
+    			if (switch_value !== (switch_value = /*component*/ ctx[0])) {
+    				if (switch_instance) {
+    					group_outros();
+    					const old_component = switch_instance;
+
+    					transition_out(old_component.$$.fragment, 1, 0, () => {
+    						destroy_component(old_component, 1);
+    					});
+
+    					check_outros();
+    				}
+
+    				if (switch_value) {
+    					switch_instance = new switch_value(switch_props());
+    					switch_instance.$on("routeEvent", /*routeEvent_handler*/ ctx[6]);
+    					create_component(switch_instance.$$.fragment);
+    					transition_in(switch_instance.$$.fragment, 1);
+    					mount_component(switch_instance, switch_instance_anchor.parentNode, switch_instance_anchor);
+    				} else {
+    					switch_instance = null;
+    				}
+    			} else if (switch_value) {
+    				switch_instance.$set(switch_instance_changes);
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			if (switch_instance) transition_in(switch_instance.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			if (switch_instance) transition_out(switch_instance.$$.fragment, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(switch_instance_anchor);
+    			if (switch_instance) destroy_component(switch_instance, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block$3.name,
+    		type: "if",
+    		source: "(202:0) {#if componentParams}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$6(ctx) {
+    	let current_block_type_index;
+    	let if_block;
+    	let if_block_anchor;
+    	let current;
+    	const if_block_creators = [create_if_block$3, create_else_block$1];
+    	const if_blocks = [];
+
+    	function select_block_type(ctx, dirty) {
+    		if (/*componentParams*/ ctx[1]) return 0;
+    		return 1;
+    	}
+
+    	current_block_type_index = select_block_type(ctx);
+    	if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+
+    	const block = {
+    		c: function create() {
+    			if_block.c();
+    			if_block_anchor = empty();
+    		},
+    		l: function claim(nodes) {
+    			throw new Error_1("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			if_blocks[current_block_type_index].m(target, anchor);
+    			insert_dev(target, if_block_anchor, anchor);
+    			current = true;
+    		},
+    		p: function update(ctx, [dirty]) {
+    			let previous_block_index = current_block_type_index;
+    			current_block_type_index = select_block_type(ctx);
+
+    			if (current_block_type_index === previous_block_index) {
+    				if_blocks[current_block_type_index].p(ctx, dirty);
+    			} else {
+    				group_outros();
+
+    				transition_out(if_blocks[previous_block_index], 1, 1, () => {
+    					if_blocks[previous_block_index] = null;
+    				});
+
+    				check_outros();
+    				if_block = if_blocks[current_block_type_index];
+
+    				if (!if_block) {
+    					if_block = if_blocks[current_block_type_index] = if_block_creators[current_block_type_index](ctx);
+    					if_block.c();
+    				} else {
+    					if_block.p(ctx, dirty);
+    				}
+
+    				transition_in(if_block, 1);
+    				if_block.m(if_block_anchor.parentNode, if_block_anchor);
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(if_block);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(if_block);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if_blocks[current_block_type_index].d(detaching);
+    			if (detaching) detach_dev(if_block_anchor);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$6.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function wrap(component, userData, ...conditions) {
+    	// Use the new wrap method and show a deprecation warning
+    	// eslint-disable-next-line no-console
+    	console.warn("Method `wrap` from `svelte-spa-router` is deprecated and will be removed in a future version. Please use `svelte-spa-router/wrap` instead. See http://bit.ly/svelte-spa-router-upgrading");
+
+    	return wrap$1({ component, userData, conditions });
+    }
+
+    /**
+     * @typedef {Object} Location
+     * @property {string} location - Location (page/view), for example `/book`
+     * @property {string} [querystring] - Querystring from the hash, as a string not parsed
+     */
+    /**
+     * Returns the current location from the hash.
+     *
+     * @returns {Location} Location object
+     * @private
+     */
+    function getLocation() {
+    	const hashPosition = window.location.href.indexOf("#/");
+
+    	let location = hashPosition > -1
+    	? window.location.href.substr(hashPosition + 1)
+    	: "/";
+
+    	// Check if there's a querystring
+    	const qsPosition = location.indexOf("?");
+
+    	let querystring = "";
+
+    	if (qsPosition > -1) {
+    		querystring = location.substr(qsPosition + 1);
+    		location = location.substr(0, qsPosition);
+    	}
+
+    	return { location, querystring };
+    }
+
+    const loc = readable(null, // eslint-disable-next-line prefer-arrow-callback
+    function start(set) {
+    	set(getLocation());
+
+    	const update = () => {
+    		set(getLocation());
+    	};
+
+    	window.addEventListener("hashchange", update, false);
+
+    	return function stop() {
+    		window.removeEventListener("hashchange", update, false);
+    	};
+    });
+
+    const location = derived(loc, $loc => $loc.location);
+    const querystring = derived(loc, $loc => $loc.querystring);
+
+    async function push(location) {
+    	if (!location || location.length < 1 || location.charAt(0) != "/" && location.indexOf("#/") !== 0) {
+    		throw Error("Invalid parameter location");
+    	}
+
+    	// Execute this code when the current call stack is complete
+    	await tick();
+
+    	// Note: this will include scroll state in history even when restoreScrollState is false
+    	history.replaceState(
+    		{
+    			scrollX: window.scrollX,
+    			scrollY: window.scrollY
+    		},
+    		undefined,
+    		undefined
+    	);
+
+    	window.location.hash = (location.charAt(0) == "#" ? "" : "#") + location;
+    }
+
+    async function pop() {
+    	// Execute this code when the current call stack is complete
+    	await tick();
+
+    	window.history.back();
+    }
+
+    async function replace(location) {
+    	if (!location || location.length < 1 || location.charAt(0) != "/" && location.indexOf("#/") !== 0) {
+    		throw Error("Invalid parameter location");
+    	}
+
+    	// Execute this code when the current call stack is complete
+    	await tick();
+
+    	const dest = (location.charAt(0) == "#" ? "" : "#") + location;
+
+    	try {
+    		window.history.replaceState(undefined, undefined, dest);
+    	} catch(e) {
+    		// eslint-disable-next-line no-console
+    		console.warn("Caught exception while replacing the current page. If you're running this in the Svelte REPL, please note that the `replace` method might not work in this environment.");
+    	}
+
+    	// The method above doesn't trigger the hashchange event, so let's do that manually
+    	window.dispatchEvent(new Event("hashchange"));
+    }
+
+    function link(node, hrefVar) {
+    	// Only apply to <a> tags
+    	if (!node || !node.tagName || node.tagName.toLowerCase() != "a") {
+    		throw Error("Action \"link\" can only be used with <a> tags");
+    	}
+
+    	updateLink(node, hrefVar || node.getAttribute("href"));
+
+    	return {
+    		update(updated) {
+    			updateLink(node, updated);
+    		}
+    	};
+    }
+
+    // Internal function used by the link function
+    function updateLink(node, href) {
+    	// Destination must start with '/'
+    	if (!href || href.length < 1 || href.charAt(0) != "/") {
+    		throw Error("Invalid value for \"href\" attribute: " + href);
+    	}
+
+    	// Add # to the href attribute
+    	node.setAttribute("href", "#" + href);
+
+    	node.addEventListener("click", scrollstateHistoryHandler);
+    }
+
+    /**
+     * The handler attached to an anchor tag responsible for updating the
+     * current history state with the current scroll state
+     *
+     * @param {HTMLElementEventMap} event - an onclick event attached to an anchor tag
+     */
+    function scrollstateHistoryHandler(event) {
+    	// Prevent default anchor onclick behaviour
+    	event.preventDefault();
+
+    	const href = event.currentTarget.getAttribute("href");
+
+    	// Setting the url (3rd arg) to href will break clicking for reasons, so don't try to do that
+    	history.replaceState(
+    		{
+    			scrollX: window.scrollX,
+    			scrollY: window.scrollY
+    		},
+    		undefined,
+    		undefined
+    	);
+
+    	// This will force an update as desired, but this time our scroll state will be attached
+    	window.location.hash = href;
+    }
+
+    function instance$6($$self, $$props, $$invalidate) {
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots("Router", slots, []);
+    	let { routes = {} } = $$props;
+    	let { prefix = "" } = $$props;
+    	let { restoreScrollState = false } = $$props;
+
+    	/**
+     * Container for a route: path, component
+     */
+    	class RouteItem {
+    		/**
+     * Initializes the object and creates a regular expression from the path, using regexparam.
+     *
+     * @param {string} path - Path to the route (must start with '/' or '*')
+     * @param {SvelteComponent|WrappedComponent} component - Svelte component for the route, optionally wrapped
+     */
+    		constructor(path, component) {
+    			if (!component || typeof component != "function" && (typeof component != "object" || component._sveltesparouter !== true)) {
+    				throw Error("Invalid component object");
+    			}
+
+    			// Path must be a regular or expression, or a string starting with '/' or '*'
+    			if (!path || typeof path == "string" && (path.length < 1 || path.charAt(0) != "/" && path.charAt(0) != "*") || typeof path == "object" && !(path instanceof RegExp)) {
+    				throw Error("Invalid value for \"path\" argument - strings must start with / or *");
+    			}
+
+    			const { pattern, keys } = regexparam(path);
+    			this.path = path;
+
+    			// Check if the component is wrapped and we have conditions
+    			if (typeof component == "object" && component._sveltesparouter === true) {
+    				this.component = component.component;
+    				this.conditions = component.conditions || [];
+    				this.userData = component.userData;
+    				this.props = component.props || {};
+    			} else {
+    				// Convert the component to a function that returns a Promise, to normalize it
+    				this.component = () => Promise.resolve(component);
+
+    				this.conditions = [];
+    				this.props = {};
+    			}
+
+    			this._pattern = pattern;
+    			this._keys = keys;
+    		}
+
+    		/**
+     * Checks if `path` matches the current route.
+     * If there's a match, will return the list of parameters from the URL (if any).
+     * In case of no match, the method will return `null`.
+     *
+     * @param {string} path - Path to test
+     * @returns {null|Object.<string, string>} List of paramters from the URL if there's a match, or `null` otherwise.
+     */
+    		match(path) {
+    			// If there's a prefix, check if it matches the start of the path.
+    			// If not, bail early, else remove it before we run the matching.
+    			if (prefix) {
+    				if (typeof prefix == "string") {
+    					if (path.startsWith(prefix)) {
+    						path = path.substr(prefix.length) || "/";
+    					} else {
+    						return null;
+    					}
+    				} else if (prefix instanceof RegExp) {
+    					const match = path.match(prefix);
+
+    					if (match && match[0]) {
+    						path = path.substr(match[0].length) || "/";
+    					} else {
+    						return null;
+    					}
+    				}
+    			}
+
+    			// Check if the pattern matches
+    			const matches = this._pattern.exec(path);
+
+    			if (matches === null) {
+    				return null;
+    			}
+
+    			// If the input was a regular expression, this._keys would be false, so return matches as is
+    			if (this._keys === false) {
+    				return matches;
+    			}
+
+    			const out = {};
+    			let i = 0;
+
+    			while (i < this._keys.length) {
+    				// In the match parameters, URL-decode all values
+    				try {
+    					out[this._keys[i]] = decodeURIComponent(matches[i + 1] || "") || null;
+    				} catch(e) {
+    					out[this._keys[i]] = null;
+    				}
+
+    				i++;
+    			}
+
+    			return out;
+    		}
+
+    		/**
+     * Dictionary with route details passed to the pre-conditions functions, as well as the `routeLoading`, `routeLoaded` and `conditionsFailed` events
+     * @typedef {Object} RouteDetail
+     * @property {string|RegExp} route - Route matched as defined in the route definition (could be a string or a reguar expression object)
+     * @property {string} location - Location path
+     * @property {string} querystring - Querystring from the hash
+     * @property {object} [userData] - Custom data passed by the user
+     * @property {SvelteComponent} [component] - Svelte component (only in `routeLoaded` events)
+     * @property {string} [name] - Name of the Svelte component (only in `routeLoaded` events)
+     */
+    		/**
+     * Executes all conditions (if any) to control whether the route can be shown. Conditions are executed in the order they are defined, and if a condition fails, the following ones aren't executed.
+     * 
+     * @param {RouteDetail} detail - Route detail
+     * @returns {bool} Returns true if all the conditions succeeded
+     */
+    		async checkConditions(detail) {
+    			for (let i = 0; i < this.conditions.length; i++) {
+    				if (!await this.conditions[i](detail)) {
+    					return false;
+    				}
+    			}
+
+    			return true;
+    		}
+    	}
+
+    	// Set up all routes
+    	const routesList = [];
+
+    	if (routes instanceof Map) {
+    		// If it's a map, iterate on it right away
+    		routes.forEach((route, path) => {
+    			routesList.push(new RouteItem(path, route));
+    		});
+    	} else {
+    		// We have an object, so iterate on its own properties
+    		Object.keys(routes).forEach(path => {
+    			routesList.push(new RouteItem(path, routes[path]));
+    		});
+    	}
+
+    	// Props for the component to render
+    	let component = null;
+
+    	let componentParams = null;
+    	let props = {};
+
+    	// Event dispatcher from Svelte
+    	const dispatch = createEventDispatcher();
+
+    	// Just like dispatch, but executes on the next iteration of the event loop
+    	async function dispatchNextTick(name, detail) {
+    		// Execute this code when the current call stack is complete
+    		await tick();
+
+    		dispatch(name, detail);
+    	}
+
+    	// If this is set, then that means we have popped into this var the state of our last scroll position
+    	let previousScrollState = null;
+
+    	if (restoreScrollState) {
+    		window.addEventListener("popstate", event => {
+    			// If this event was from our history.replaceState, event.state will contain
+    			// our scroll history. Otherwise, event.state will be null (like on forward
+    			// navigation)
+    			if (event.state && event.state.scrollY) {
+    				previousScrollState = event.state;
+    			} else {
+    				previousScrollState = null;
+    			}
+    		});
+
+    		afterUpdate(() => {
+    			// If this exists, then this is a back navigation: restore the scroll position
+    			if (previousScrollState) {
+    				window.scrollTo(previousScrollState.scrollX, previousScrollState.scrollY);
+    			} else {
+    				// Otherwise this is a forward navigation: scroll to top
+    				window.scrollTo(0, 0);
+    			}
+    		});
+    	}
+
+    	// Always have the latest value of loc
+    	let lastLoc = null;
+
+    	// Current object of the component loaded
+    	let componentObj = null;
+
+    	// Handle hash change events
+    	// Listen to changes in the $loc store and update the page
+    	// Do not use the $: syntax because it gets triggered by too many things
+    	loc.subscribe(async newLoc => {
+    		lastLoc = newLoc;
+
+    		// Find a route matching the location
+    		let i = 0;
+
+    		while (i < routesList.length) {
+    			const match = routesList[i].match(newLoc.location);
+
+    			if (!match) {
+    				i++;
+    				continue;
+    			}
+
+    			const detail = {
+    				route: routesList[i].path,
+    				location: newLoc.location,
+    				querystring: newLoc.querystring,
+    				userData: routesList[i].userData
+    			};
+
+    			// Check if the route can be loaded - if all conditions succeed
+    			if (!await routesList[i].checkConditions(detail)) {
+    				// Don't display anything
+    				$$invalidate(0, component = null);
+
+    				componentObj = null;
+
+    				// Trigger an event to notify the user, then exit
+    				dispatchNextTick("conditionsFailed", detail);
+
+    				return;
+    			}
+
+    			// Trigger an event to alert that we're loading the route
+    			// We need to clone the object on every event invocation so we don't risk the object to be modified in the next tick
+    			dispatchNextTick("routeLoading", Object.assign({}, detail));
+
+    			// If there's a component to show while we're loading the route, display it
+    			const obj = routesList[i].component;
+
+    			// Do not replace the component if we're loading the same one as before, to avoid the route being unmounted and re-mounted
+    			if (componentObj != obj) {
+    				if (obj.loading) {
+    					$$invalidate(0, component = obj.loading);
+    					componentObj = obj;
+    					$$invalidate(1, componentParams = obj.loadingParams);
+    					$$invalidate(2, props = {});
+
+    					// Trigger the routeLoaded event for the loading component
+    					// Create a copy of detail so we don't modify the object for the dynamic route (and the dynamic route doesn't modify our object too)
+    					dispatchNextTick("routeLoaded", Object.assign({}, detail, { component, name: component.name }));
+    				} else {
+    					$$invalidate(0, component = null);
+    					componentObj = null;
+    				}
+
+    				// Invoke the Promise
+    				const loaded = await obj();
+
+    				// Now that we're here, after the promise resolved, check if we still want this component, as the user might have navigated to another page in the meanwhile
+    				if (newLoc != lastLoc) {
+    					// Don't update the component, just exit
+    					return;
+    				}
+
+    				// If there is a "default" property, which is used by async routes, then pick that
+    				$$invalidate(0, component = loaded && loaded.default || loaded);
+
+    				componentObj = obj;
+    			}
+
+    			// Set componentParams only if we have a match, to avoid a warning similar to `<Component> was created with unknown prop 'params'`
+    			// Of course, this assumes that developers always add a "params" prop when they are expecting parameters
+    			if (match && typeof match == "object" && Object.keys(match).length) {
+    				$$invalidate(1, componentParams = match);
+    			} else {
+    				$$invalidate(1, componentParams = null);
+    			}
+
+    			// Set static props, if any
+    			$$invalidate(2, props = routesList[i].props);
+
+    			// Dispatch the routeLoaded event then exit
+    			// We need to clone the object on every event invocation so we don't risk the object to be modified in the next tick
+    			dispatchNextTick("routeLoaded", Object.assign({}, detail, { component, name: component.name }));
+
+    			return;
+    		}
+
+    		// If we're still here, there was no match, so show the empty component
+    		$$invalidate(0, component = null);
+
+    		componentObj = null;
+    	});
+
+    	const writable_props = ["routes", "prefix", "restoreScrollState"];
+
+    	Object_1.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console_1$1.warn(`<Router> was created with unknown prop '${key}'`);
+    	});
+
+    	function routeEvent_handler(event) {
+    		bubble($$self, event);
+    	}
+
+    	function routeEvent_handler_1(event) {
+    		bubble($$self, event);
+    	}
+
+    	$$self.$$set = $$props => {
+    		if ("routes" in $$props) $$invalidate(3, routes = $$props.routes);
+    		if ("prefix" in $$props) $$invalidate(4, prefix = $$props.prefix);
+    		if ("restoreScrollState" in $$props) $$invalidate(5, restoreScrollState = $$props.restoreScrollState);
+    	};
+
+    	$$self.$capture_state = () => ({
+    		readable,
+    		derived,
+    		tick,
+    		_wrap: wrap$1,
+    		wrap,
+    		getLocation,
+    		loc,
+    		location,
+    		querystring,
+    		push,
+    		pop,
+    		replace,
+    		link,
+    		updateLink,
+    		scrollstateHistoryHandler,
+    		createEventDispatcher,
+    		afterUpdate,
+    		regexparam,
+    		routes,
+    		prefix,
+    		restoreScrollState,
+    		RouteItem,
+    		routesList,
+    		component,
+    		componentParams,
+    		props,
+    		dispatch,
+    		dispatchNextTick,
+    		previousScrollState,
+    		lastLoc,
+    		componentObj
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ("routes" in $$props) $$invalidate(3, routes = $$props.routes);
+    		if ("prefix" in $$props) $$invalidate(4, prefix = $$props.prefix);
+    		if ("restoreScrollState" in $$props) $$invalidate(5, restoreScrollState = $$props.restoreScrollState);
+    		if ("component" in $$props) $$invalidate(0, component = $$props.component);
+    		if ("componentParams" in $$props) $$invalidate(1, componentParams = $$props.componentParams);
+    		if ("props" in $$props) $$invalidate(2, props = $$props.props);
+    		if ("previousScrollState" in $$props) previousScrollState = $$props.previousScrollState;
+    		if ("lastLoc" in $$props) lastLoc = $$props.lastLoc;
+    		if ("componentObj" in $$props) componentObj = $$props.componentObj;
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	$$self.$$.update = () => {
+    		if ($$self.$$.dirty & /*restoreScrollState*/ 32) {
+    			// Update history.scrollRestoration depending on restoreScrollState
+    			history.scrollRestoration = restoreScrollState ? "manual" : "auto";
+    		}
+    	};
+
+    	return [
+    		component,
+    		componentParams,
+    		props,
+    		routes,
+    		prefix,
+    		restoreScrollState,
+    		routeEvent_handler,
+    		routeEvent_handler_1
+    	];
+    }
+
+    class Router extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+
+    		init(this, options, instance$6, create_fragment$6, safe_not_equal, {
+    			routes: 3,
+    			prefix: 4,
+    			restoreScrollState: 5
+    		});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Router",
+    			options,
+    			id: create_fragment$6.name
+    		});
+    	}
+
+    	get routes() {
+    		throw new Error_1("<Router>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set routes(value) {
+    		throw new Error_1("<Router>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get prefix() {
+    		throw new Error_1("<Router>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set prefix(value) {
+    		throw new Error_1("<Router>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get restoreScrollState() {
+    		throw new Error_1("<Router>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set restoreScrollState(value) {
+    		throw new Error_1("<Router>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+    }
+
     const persistCart = () => {
       const persist = localStorage.getItem('sf-ct');
       const data = persist ? JSON.parse(persist) : [];
@@ -866,11 +1925,15 @@ var app = (function () {
       return lsCart
     };
 
-    const baseURL = 'http://localhost:8000/api/';
-
     const isLoading = writable(false);
 
     const productsList = writable([]);
+
+    // Populate productsList store
+    const setFetchedProducts = (data) => {
+        productsList.set(data);
+    	isLoading.set(false);
+    };
 
     // Properties to filter by
     const nameF = writable('');
@@ -881,19 +1944,12 @@ var app = (function () {
         ([$productlist, $nameF]) => $productlist.filter(p => p.name.toLowerCase().includes($nameF))
     );
 
-    // Populate productsList store
-    const setFetchedProducts = (data) => {
-        productsList.set(data);
-    	isLoading.set(false);
-    };
-
     // Cart items
     const cartItems = persistCart();
 
     // Populate cart if exists in database
     const setFetchedCart = (data) => {
         cartItems.set(data);
-        console.log(data);
     };
 
     // // Add product to cartItems
@@ -912,10 +1968,19 @@ var app = (function () {
     //     cartItems.update(items => [...items, data])
     // }
 
+
+    const productDetail = writable({});
+
+    // Populate productDetail store
+    const setProductDetails = (data) => {
+        productDetail.set(data);
+    	isLoading.set(false);
+    };
+
     // Get all products from database 
     const fetchProducts = async () => {
         isLoading.set(true);
-        let products = await axios.get(`${baseURL}listproducts/`)
+        let products = await axios.get('/api/listproducts/')
             .then(res => res.data);
         setFetchedProducts(products);
     };
@@ -923,19 +1988,15 @@ var app = (function () {
     // Check cookies for cart, else check database
     const fetchCart = async () => {
         let userCart = [];
-        console.log("fetchCart, user:", user);
         if (user != "AnonymousUser") {
-            userCart = await axios.get(`${baseURL}getcart/${userId}`)
+            userCart = await axios.get(`/api/getcart/${userId}`)
                 .then(res => res.data["items"]);
-                console.log("fetchCart checking backend. Cart:", userCart);
             if (userCart.length <= 0)  {
                 let lsCart = JSON.parse(localStorage.getItem('sf-ct'));
-                console.log("fetchCart lsCart:", lsCart);
                 if (lsCart.length && lsCart.length > 0) {
                     lsCart = lsCart.map(x => ({id: x.id}));
                     for (let i = 0; i < lsCart.length; i++) {
                         let iId = await addItem(lsCart[i].product, lsCart.quantity);
-                        console.log("fetchCart adding to bckend:", lsCart[i]);
                         let temp = lsCart[i];
                         temp.id = iId;
                         userCart.push(temp);
@@ -949,875 +2010,29 @@ var app = (function () {
     // Add product to cart
     const addItem = async (data, n = 1) => {
         if (user != "AnonymousUser")  {
-            console.log("addItem", data);
             data.n = n;
             data.userId = userId;
-            console.log('addItem, querying backend:', data);
-            let itemId = await axios.post(`${baseURL}additem/`, data)
+            let itemId = await axios.post('/api/additem/', data)
                 .then(res => res.data.iId);
             return itemId
         }
     };
 
+
     // Update cart quantity
     const updateItem = async (data) => {
-        if (user === "AnonymousUser") {
-            console.log('updateItem, Not Signed in');
-        } else {
-            let userCart = await axios.post(`${baseURL}updateitem/`, data)
+        if (user === "AnonymousUser") ; else {
+            await axios.post('/api/updateitem/', data)
                 .then(res => res.data);
-            console.log('updateItem, userCart:', userCart);
         }
     };
 
     const removeItem = async (data) => {
-        if (user === "AnonymousUser") {
-            console.log('Not Signed in');
-        } else {
-            await axios.post(`${baseURL}removeitem/`, data);
+        if (user != "AnonymousUser") {
+            await axios.post('/api/removeitem/', data);
                 // .then(res => console.log("from addItem in service.js", res.data));
         }
     };
-
-    /* src/screens/ProductTile.svelte generated by Svelte v3.37.0 */
-
-    const file$5 = "src/screens/ProductTile.svelte";
-
-    function create_fragment$5(ctx) {
-    	let div2;
-    	let button0;
-    	let div0;
-    	let t0;
-    	let h2;
-    	let t1_value = /*product*/ ctx[0].name + "";
-    	let t1;
-    	let t2;
-    	let div1;
-    	let span1;
-    	let t3;
-    	let span0;
-    	let t4_value = Math.trunc(/*product*/ ctx[0].price) + "";
-    	let t4;
-    	let t5;
-    	let span2;
-    	let t6_value = /*product*/ ctx[0].price.split(".")[1] + "";
-    	let t6;
-    	let t7;
-    	let button1;
-    	let i;
-    	let t8;
-    	let mounted;
-    	let dispose;
-
-    	const block = {
-    		c: function create() {
-    			div2 = element("div");
-    			button0 = element("button");
-    			div0 = element("div");
-    			t0 = space();
-    			h2 = element("h2");
-    			t1 = text(t1_value);
-    			t2 = space();
-    			div1 = element("div");
-    			span1 = element("span");
-    			t3 = text("₹");
-    			span0 = element("span");
-    			t4 = text(t4_value);
-    			t5 = space();
-    			span2 = element("span");
-    			t6 = text(t6_value);
-    			t7 = space();
-    			button1 = element("button");
-    			i = element("i");
-    			t8 = text(" Add To Cart");
-    			set_style(div0, "background-image", "url('" + /*product*/ ctx[0].image_url + "')");
-    			attr_dev(div0, "class", "bg-cover bg-center h-36 sm:h-60");
-    			add_location(div0, file$5, 8, 8, 224);
-    			attr_dev(h2, "class", "sm:text-lg text-grey-700");
-    			add_location(h2, file$5, 11, 8, 350);
-    			attr_dev(span0, "class", "font-bold text-grey-700");
-    			add_location(span0, file$5, 13, 66, 487);
-    			attr_dev(span1, "class", "align-top text-2xl text-grey-500");
-    			add_location(span1, file$5, 13, 12, 433);
-    			attr_dev(span2, "class", "align-top text-sm text-grey-500");
-    			add_location(span2, file$5, 14, 12, 579);
-    			add_location(div1, file$5, 12, 8, 415);
-    			attr_dev(button0, "class", "w-full focus:outline-none");
-    			add_location(button0, file$5, 7, 4, 134);
-    			attr_dev(i, "class", "fas fa-cart-arrow-down");
-    			add_location(i, file$5, 19, 8, 828);
-    			attr_dev(button1, "class", "text-sm btn-m btn-w w-full border border-info-300 hover:border-info-200");
-    			add_location(button1, file$5, 18, 4, 696);
-    			attr_dev(div2, "class", "store-card");
-    			add_location(div2, file$5, 6, 0, 105);
-    		},
-    		l: function claim(nodes) {
-    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
-    		},
-    		m: function mount(target, anchor) {
-    			insert_dev(target, div2, anchor);
-    			append_dev(div2, button0);
-    			append_dev(button0, div0);
-    			append_dev(button0, t0);
-    			append_dev(button0, h2);
-    			append_dev(h2, t1);
-    			append_dev(button0, t2);
-    			append_dev(button0, div1);
-    			append_dev(div1, span1);
-    			append_dev(span1, t3);
-    			append_dev(span1, span0);
-    			append_dev(span0, t4);
-    			append_dev(div1, t5);
-    			append_dev(div1, span2);
-    			append_dev(span2, t6);
-    			append_dev(div2, t7);
-    			append_dev(div2, button1);
-    			append_dev(button1, i);
-    			append_dev(button1, t8);
-
-    			if (!mounted) {
-    				dispose = [
-    					listen_dev(
-    						button0,
-    						"click",
-    						function () {
-    							if (is_function(/*setSelectedProduct*/ ctx[2](/*product*/ ctx[0]))) /*setSelectedProduct*/ ctx[2](/*product*/ ctx[0]).apply(this, arguments);
-    						},
-    						false,
-    						false,
-    						false
-    					),
-    					listen_dev(
-    						button1,
-    						"click",
-    						function () {
-    							if (is_function(/*addToCart*/ ctx[1](/*product*/ ctx[0], 1))) /*addToCart*/ ctx[1](/*product*/ ctx[0], 1).apply(this, arguments);
-    						},
-    						false,
-    						false,
-    						false
-    					)
-    				];
-
-    				mounted = true;
-    			}
-    		},
-    		p: function update(new_ctx, [dirty]) {
-    			ctx = new_ctx;
-
-    			if (dirty & /*product*/ 1) {
-    				set_style(div0, "background-image", "url('" + /*product*/ ctx[0].image_url + "')");
-    			}
-
-    			if (dirty & /*product*/ 1 && t1_value !== (t1_value = /*product*/ ctx[0].name + "")) set_data_dev(t1, t1_value);
-    			if (dirty & /*product*/ 1 && t4_value !== (t4_value = Math.trunc(/*product*/ ctx[0].price) + "")) set_data_dev(t4, t4_value);
-    			if (dirty & /*product*/ 1 && t6_value !== (t6_value = /*product*/ ctx[0].price.split(".")[1] + "")) set_data_dev(t6, t6_value);
-    		},
-    		i: noop,
-    		o: noop,
-    		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div2);
-    			mounted = false;
-    			run_all(dispose);
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_fragment$5.name,
-    		type: "component",
-    		source: "",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    function instance$5($$self, $$props, $$invalidate) {
-    	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots("ProductTile", slots, []);
-    	let { product } = $$props;
-    	let { addToCart } = $$props;
-    	let { setSelectedProduct } = $$props;
-    	const writable_props = ["product", "addToCart", "setSelectedProduct"];
-
-    	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<ProductTile> was created with unknown prop '${key}'`);
-    	});
-
-    	$$self.$$set = $$props => {
-    		if ("product" in $$props) $$invalidate(0, product = $$props.product);
-    		if ("addToCart" in $$props) $$invalidate(1, addToCart = $$props.addToCart);
-    		if ("setSelectedProduct" in $$props) $$invalidate(2, setSelectedProduct = $$props.setSelectedProduct);
-    	};
-
-    	$$self.$capture_state = () => ({ product, addToCart, setSelectedProduct });
-
-    	$$self.$inject_state = $$props => {
-    		if ("product" in $$props) $$invalidate(0, product = $$props.product);
-    		if ("addToCart" in $$props) $$invalidate(1, addToCart = $$props.addToCart);
-    		if ("setSelectedProduct" in $$props) $$invalidate(2, setSelectedProduct = $$props.setSelectedProduct);
-    	};
-
-    	if ($$props && "$$inject" in $$props) {
-    		$$self.$inject_state($$props.$$inject);
-    	}
-
-    	return [product, addToCart, setSelectedProduct];
-    }
-
-    class ProductTile extends SvelteComponentDev {
-    	constructor(options) {
-    		super(options);
-
-    		init(this, options, instance$5, create_fragment$5, safe_not_equal, {
-    			product: 0,
-    			addToCart: 1,
-    			setSelectedProduct: 2
-    		});
-
-    		dispatch_dev("SvelteRegisterComponent", {
-    			component: this,
-    			tagName: "ProductTile",
-    			options,
-    			id: create_fragment$5.name
-    		});
-
-    		const { ctx } = this.$$;
-    		const props = options.props || {};
-
-    		if (/*product*/ ctx[0] === undefined && !("product" in props)) {
-    			console.warn("<ProductTile> was created without expected prop 'product'");
-    		}
-
-    		if (/*addToCart*/ ctx[1] === undefined && !("addToCart" in props)) {
-    			console.warn("<ProductTile> was created without expected prop 'addToCart'");
-    		}
-
-    		if (/*setSelectedProduct*/ ctx[2] === undefined && !("setSelectedProduct" in props)) {
-    			console.warn("<ProductTile> was created without expected prop 'setSelectedProduct'");
-    		}
-    	}
-
-    	get product() {
-    		throw new Error("<ProductTile>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set product(value) {
-    		throw new Error("<ProductTile>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	get addToCart() {
-    		throw new Error("<ProductTile>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set addToCart(value) {
-    		throw new Error("<ProductTile>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	get setSelectedProduct() {
-    		throw new Error("<ProductTile>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set setSelectedProduct(value) {
-    		throw new Error("<ProductTile>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-    }
-
-    /* src/screens/ProductDetailModal.svelte generated by Svelte v3.37.0 */
-
-    const file$4 = "src/screens/ProductDetailModal.svelte";
-
-    function create_fragment$4(ctx) {
-    	let div1;
-    	let div0;
-    	let button;
-    	let i;
-    	let t0;
-    	let h1;
-    	let t1_value = /*product*/ ctx[0].name + "";
-    	let t1;
-    	let t2;
-    	let img;
-    	let img_src_value;
-    	let img_alt_value;
-    	let mounted;
-    	let dispose;
-
-    	const block = {
-    		c: function create() {
-    			div1 = element("div");
-    			div0 = element("div");
-    			button = element("button");
-    			i = element("i");
-    			t0 = space();
-    			h1 = element("h1");
-    			t1 = text(t1_value);
-    			t2 = space();
-    			img = element("img");
-    			attr_dev(i, "class", "fas fa-arrow-left");
-    			add_location(i, file$4, 7, 54, 333);
-    			add_location(button, file$4, 7, 8, 287);
-    			add_location(h1, file$4, 8, 8, 384);
-    			if (img.src !== (img_src_value = /*product*/ ctx[0].image_url)) attr_dev(img, "src", img_src_value);
-    			attr_dev(img, "alt", img_alt_value = /*product*/ ctx[0].name);
-    			add_location(img, file$4, 9, 8, 416);
-    			attr_dev(div0, "class", "mx-auto w-11/12 h-fit overflow-y-scroll");
-    			add_location(div0, file$4, 6, 4, 200);
-    			attr_dev(div1, "class", "fixed bottom-0 h-fit w-full bg-white bg-opacity-50 border-opacity-70");
-    			add_location(div1, file$4, 5, 0, 77);
-    		},
-    		l: function claim(nodes) {
-    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
-    		},
-    		m: function mount(target, anchor) {
-    			insert_dev(target, div1, anchor);
-    			append_dev(div1, div0);
-    			append_dev(div0, button);
-    			append_dev(button, i);
-    			append_dev(div0, t0);
-    			append_dev(div0, h1);
-    			append_dev(h1, t1);
-    			append_dev(div0, t2);
-    			append_dev(div0, img);
-
-    			if (!mounted) {
-    				dispose = [
-    					listen_dev(
-    						button,
-    						"click",
-    						function () {
-    							if (is_function(/*setSelectedProduct*/ ctx[1](null))) /*setSelectedProduct*/ ctx[1](null).apply(this, arguments);
-    						},
-    						false,
-    						false,
-    						false
-    					),
-    					listen_dev(div0, "click", stop_propagation(/*click_handler*/ ctx[2]), false, false, true),
-    					listen_dev(
-    						div1,
-    						"click",
-    						function () {
-    							if (is_function(/*setSelectedProduct*/ ctx[1](null))) /*setSelectedProduct*/ ctx[1](null).apply(this, arguments);
-    						},
-    						false,
-    						false,
-    						false
-    					)
-    				];
-
-    				mounted = true;
-    			}
-    		},
-    		p: function update(new_ctx, [dirty]) {
-    			ctx = new_ctx;
-    			if (dirty & /*product*/ 1 && t1_value !== (t1_value = /*product*/ ctx[0].name + "")) set_data_dev(t1, t1_value);
-
-    			if (dirty & /*product*/ 1 && img.src !== (img_src_value = /*product*/ ctx[0].image_url)) {
-    				attr_dev(img, "src", img_src_value);
-    			}
-
-    			if (dirty & /*product*/ 1 && img_alt_value !== (img_alt_value = /*product*/ ctx[0].name)) {
-    				attr_dev(img, "alt", img_alt_value);
-    			}
-    		},
-    		i: noop,
-    		o: noop,
-    		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div1);
-    			mounted = false;
-    			run_all(dispose);
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_fragment$4.name,
-    		type: "component",
-    		source: "",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    function instance$4($$self, $$props, $$invalidate) {
-    	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots("ProductDetailModal", slots, []);
-    	let { product } = $$props;
-    	let { setSelectedProduct } = $$props;
-    	const writable_props = ["product", "setSelectedProduct"];
-
-    	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<ProductDetailModal> was created with unknown prop '${key}'`);
-    	});
-
-    	function click_handler(event) {
-    		bubble($$self, event);
-    	}
-
-    	$$self.$$set = $$props => {
-    		if ("product" in $$props) $$invalidate(0, product = $$props.product);
-    		if ("setSelectedProduct" in $$props) $$invalidate(1, setSelectedProduct = $$props.setSelectedProduct);
-    	};
-
-    	$$self.$capture_state = () => ({ product, setSelectedProduct });
-
-    	$$self.$inject_state = $$props => {
-    		if ("product" in $$props) $$invalidate(0, product = $$props.product);
-    		if ("setSelectedProduct" in $$props) $$invalidate(1, setSelectedProduct = $$props.setSelectedProduct);
-    	};
-
-    	if ($$props && "$$inject" in $$props) {
-    		$$self.$inject_state($$props.$$inject);
-    	}
-
-    	return [product, setSelectedProduct, click_handler];
-    }
-
-    class ProductDetailModal extends SvelteComponentDev {
-    	constructor(options) {
-    		super(options);
-    		init(this, options, instance$4, create_fragment$4, safe_not_equal, { product: 0, setSelectedProduct: 1 });
-
-    		dispatch_dev("SvelteRegisterComponent", {
-    			component: this,
-    			tagName: "ProductDetailModal",
-    			options,
-    			id: create_fragment$4.name
-    		});
-
-    		const { ctx } = this.$$;
-    		const props = options.props || {};
-
-    		if (/*product*/ ctx[0] === undefined && !("product" in props)) {
-    			console.warn("<ProductDetailModal> was created without expected prop 'product'");
-    		}
-
-    		if (/*setSelectedProduct*/ ctx[1] === undefined && !("setSelectedProduct" in props)) {
-    			console.warn("<ProductDetailModal> was created without expected prop 'setSelectedProduct'");
-    		}
-    	}
-
-    	get product() {
-    		throw new Error("<ProductDetailModal>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set product(value) {
-    		throw new Error("<ProductDetailModal>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	get setSelectedProduct() {
-    		throw new Error("<ProductDetailModal>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set setSelectedProduct(value) {
-    		throw new Error("<ProductDetailModal>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-    }
-
-    /* src/screens/Shop.svelte generated by Svelte v3.37.0 */
-    const file$3 = "src/screens/Shop.svelte";
-
-    function get_each_context$1(ctx, list, i) {
-    	const child_ctx = ctx.slice();
-    	child_ctx[7] = list[i];
-    	return child_ctx;
-    }
-
-    // (44:4) {#each $filteredProducts as product}
-    function create_each_block$1(ctx) {
-    	let producttile;
-    	let current;
-
-    	producttile = new ProductTile({
-    			props: {
-    				product: /*product*/ ctx[7],
-    				addToCart: /*addToCart*/ ctx[4],
-    				setSelectedProduct: /*setSelectedProduct*/ ctx[3]
-    			},
-    			$$inline: true
-    		});
-
-    	const block = {
-    		c: function create() {
-    			create_component(producttile.$$.fragment);
-    		},
-    		m: function mount(target, anchor) {
-    			mount_component(producttile, target, anchor);
-    			current = true;
-    		},
-    		p: function update(ctx, dirty) {
-    			const producttile_changes = {};
-    			if (dirty & /*$filteredProducts*/ 4) producttile_changes.product = /*product*/ ctx[7];
-    			producttile.$set(producttile_changes);
-    		},
-    		i: function intro(local) {
-    			if (current) return;
-    			transition_in(producttile.$$.fragment, local);
-    			current = true;
-    		},
-    		o: function outro(local) {
-    			transition_out(producttile.$$.fragment, local);
-    			current = false;
-    		},
-    		d: function destroy(detaching) {
-    			destroy_component(producttile, detaching);
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_each_block$1.name,
-    		type: "each",
-    		source: "(44:4) {#each $filteredProducts as product}",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    // (49:0) {#if selectedProduct}
-    function create_if_block$1(ctx) {
-    	let productdetailmodal;
-    	let current;
-
-    	productdetailmodal = new ProductDetailModal({
-    			props: {
-    				product: /*selectedProduct*/ ctx[1],
-    				setSelectedProduct: /*setSelectedProduct*/ ctx[3]
-    			},
-    			$$inline: true
-    		});
-
-    	const block = {
-    		c: function create() {
-    			create_component(productdetailmodal.$$.fragment);
-    		},
-    		m: function mount(target, anchor) {
-    			mount_component(productdetailmodal, target, anchor);
-    			current = true;
-    		},
-    		p: function update(ctx, dirty) {
-    			const productdetailmodal_changes = {};
-    			if (dirty & /*selectedProduct*/ 2) productdetailmodal_changes.product = /*selectedProduct*/ ctx[1];
-    			productdetailmodal.$set(productdetailmodal_changes);
-    		},
-    		i: function intro(local) {
-    			if (current) return;
-    			transition_in(productdetailmodal.$$.fragment, local);
-    			current = true;
-    		},
-    		o: function outro(local) {
-    			transition_out(productdetailmodal.$$.fragment, local);
-    			current = false;
-    		},
-    		d: function destroy(detaching) {
-    			destroy_component(productdetailmodal, detaching);
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_if_block$1.name,
-    		type: "if",
-    		source: "(49:0) {#if selectedProduct}",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    function create_fragment$3(ctx) {
-    	let div0;
-    	let p;
-    	let t0;
-    	let i;
-    	let t1;
-    	let input;
-    	let t2;
-    	let div1;
-    	let t3;
-    	let if_block_anchor;
-    	let current;
-    	let mounted;
-    	let dispose;
-    	let each_value = /*$filteredProducts*/ ctx[2];
-    	validate_each_argument(each_value);
-    	let each_blocks = [];
-
-    	for (let i = 0; i < each_value.length; i += 1) {
-    		each_blocks[i] = create_each_block$1(get_each_context$1(ctx, each_value, i));
-    	}
-
-    	const out = i => transition_out(each_blocks[i], 1, 1, () => {
-    		each_blocks[i] = null;
-    	});
-
-    	let if_block = /*selectedProduct*/ ctx[1] && create_if_block$1(ctx);
-
-    	const block = {
-    		c: function create() {
-    			div0 = element("div");
-    			p = element("p");
-    			t0 = text("Filter Products ");
-    			i = element("i");
-    			t1 = space();
-    			input = element("input");
-    			t2 = space();
-    			div1 = element("div");
-
-    			for (let i = 0; i < each_blocks.length; i += 1) {
-    				each_blocks[i].c();
-    			}
-
-    			t3 = space();
-    			if (if_block) if_block.c();
-    			if_block_anchor = empty();
-    			attr_dev(i, "class", "fas fa-filter");
-    			add_location(i, file$3, 37, 42, 1189);
-    			attr_dev(p, "class", "text-white");
-    			add_location(p, file$3, 37, 4, 1151);
-    			attr_dev(input, "class", "w-48 rounded-sm focus:outline-none px-1");
-    			attr_dev(input, "type", "search");
-    			attr_dev(input, "placeholder", "Product");
-    			add_location(input, file$3, 38, 4, 1227);
-    			attr_dev(div0, "class", "fixed px-1 py-2 w-full bg-primary-600 shadow-md md:w-52 md:rounded-r-md md:top-1/4 text-center");
-    			add_location(div0, file$3, 36, 0, 1038);
-    			attr_dev(div1, "class", "store-grid");
-    			add_location(div1, file$3, 42, 0, 1350);
-    		},
-    		l: function claim(nodes) {
-    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
-    		},
-    		m: function mount(target, anchor) {
-    			insert_dev(target, div0, anchor);
-    			append_dev(div0, p);
-    			append_dev(p, t0);
-    			append_dev(p, i);
-    			append_dev(div0, t1);
-    			append_dev(div0, input);
-    			set_input_value(input, /*nameTerm*/ ctx[0]);
-    			insert_dev(target, t2, anchor);
-    			insert_dev(target, div1, anchor);
-
-    			for (let i = 0; i < each_blocks.length; i += 1) {
-    				each_blocks[i].m(div1, null);
-    			}
-
-    			insert_dev(target, t3, anchor);
-    			if (if_block) if_block.m(target, anchor);
-    			insert_dev(target, if_block_anchor, anchor);
-    			current = true;
-
-    			if (!mounted) {
-    				dispose = listen_dev(input, "input", /*input_input_handler*/ ctx[5]);
-    				mounted = true;
-    			}
-    		},
-    		p: function update(ctx, [dirty]) {
-    			if (dirty & /*nameTerm*/ 1) {
-    				set_input_value(input, /*nameTerm*/ ctx[0]);
-    			}
-
-    			if (dirty & /*$filteredProducts, addToCart, setSelectedProduct*/ 28) {
-    				each_value = /*$filteredProducts*/ ctx[2];
-    				validate_each_argument(each_value);
-    				let i;
-
-    				for (i = 0; i < each_value.length; i += 1) {
-    					const child_ctx = get_each_context$1(ctx, each_value, i);
-
-    					if (each_blocks[i]) {
-    						each_blocks[i].p(child_ctx, dirty);
-    						transition_in(each_blocks[i], 1);
-    					} else {
-    						each_blocks[i] = create_each_block$1(child_ctx);
-    						each_blocks[i].c();
-    						transition_in(each_blocks[i], 1);
-    						each_blocks[i].m(div1, null);
-    					}
-    				}
-
-    				group_outros();
-
-    				for (i = each_value.length; i < each_blocks.length; i += 1) {
-    					out(i);
-    				}
-
-    				check_outros();
-    			}
-
-    			if (/*selectedProduct*/ ctx[1]) {
-    				if (if_block) {
-    					if_block.p(ctx, dirty);
-
-    					if (dirty & /*selectedProduct*/ 2) {
-    						transition_in(if_block, 1);
-    					}
-    				} else {
-    					if_block = create_if_block$1(ctx);
-    					if_block.c();
-    					transition_in(if_block, 1);
-    					if_block.m(if_block_anchor.parentNode, if_block_anchor);
-    				}
-    			} else if (if_block) {
-    				group_outros();
-
-    				transition_out(if_block, 1, 1, () => {
-    					if_block = null;
-    				});
-
-    				check_outros();
-    			}
-    		},
-    		i: function intro(local) {
-    			if (current) return;
-
-    			for (let i = 0; i < each_value.length; i += 1) {
-    				transition_in(each_blocks[i]);
-    			}
-
-    			transition_in(if_block);
-    			current = true;
-    		},
-    		o: function outro(local) {
-    			each_blocks = each_blocks.filter(Boolean);
-
-    			for (let i = 0; i < each_blocks.length; i += 1) {
-    				transition_out(each_blocks[i]);
-    			}
-
-    			transition_out(if_block);
-    			current = false;
-    		},
-    		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div0);
-    			if (detaching) detach_dev(t2);
-    			if (detaching) detach_dev(div1);
-    			destroy_each(each_blocks, detaching);
-    			if (detaching) detach_dev(t3);
-    			if (if_block) if_block.d(detaching);
-    			if (detaching) detach_dev(if_block_anchor);
-    			mounted = false;
-    			dispose();
-    		}
-    	};
-
-    	dispatch_dev("SvelteRegisterBlock", {
-    		block,
-    		id: create_fragment$3.name,
-    		type: "component",
-    		source: "",
-    		ctx
-    	});
-
-    	return block;
-    }
-
-    function instance$3($$self, $$props, $$invalidate) {
-    	let $cartItems;
-    	let $filteredProducts;
-    	validate_store(cartItems, "cartItems");
-    	component_subscribe($$self, cartItems, $$value => $$invalidate(6, $cartItems = $$value));
-    	validate_store(filteredProducts, "filteredProducts");
-    	component_subscribe($$self, filteredProducts, $$value => $$invalidate(2, $filteredProducts = $$value));
-    	let { $$slots: slots = {}, $$scope } = $$props;
-    	validate_slots("Shop", slots, []);
-    	let selectedProduct = null;
-
-    	const setSelectedProduct = prod => {
-    		$$invalidate(1, selectedProduct = prod);
-    	};
-
-    	let nameTerm = "";
-
-    	const addToCart = async data => {
-    		let item = {};
-    		item.id = data.id;
-    		item.moq = data.moq;
-    		let iId = await addItem(item, 1);
-
-    		for (let i = 0; i < $cartItems.length; i++) {
-    			if ($cartItems[i].product.id === data.id) {
-    				set_store_value(cartItems, $cartItems[i].quantity++, $cartItems);
-    				cartItems.set($cartItems);
-    				return;
-    			}
-    		}
-
-    		let temp = {};
-    		temp.id = iId;
-    		temp.product = {};
-    		temp.product = data;
-    		temp.quantity = data.moq;
-    		cartItems.update(items => [...items, temp]);
-    	};
-
-    	const writable_props = [];
-
-    	Object.keys($$props).forEach(key => {
-    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<Shop> was created with unknown prop '${key}'`);
-    	});
-
-    	function input_input_handler() {
-    		nameTerm = this.value;
-    		$$invalidate(0, nameTerm);
-    	}
-
-    	$$self.$capture_state = () => ({
-    		filteredProducts,
-    		nameF,
-    		cartItems,
-    		ProductTile,
-    		ProductDetailModal,
-    		addItem,
-    		selectedProduct,
-    		setSelectedProduct,
-    		nameTerm,
-    		addToCart,
-    		$cartItems,
-    		$filteredProducts
-    	});
-
-    	$$self.$inject_state = $$props => {
-    		if ("selectedProduct" in $$props) $$invalidate(1, selectedProduct = $$props.selectedProduct);
-    		if ("nameTerm" in $$props) $$invalidate(0, nameTerm = $$props.nameTerm);
-    	};
-
-    	if ($$props && "$$inject" in $$props) {
-    		$$self.$inject_state($$props.$$inject);
-    	}
-
-    	$$self.$$.update = () => {
-    		if ($$self.$$.dirty & /*nameTerm*/ 1) {
-    			nameF.set(nameTerm.toLocaleLowerCase());
-    		}
-    	};
-
-    	return [
-    		nameTerm,
-    		selectedProduct,
-    		$filteredProducts,
-    		setSelectedProduct,
-    		addToCart,
-    		input_input_handler
-    	];
-    }
-
-    class Shop extends SvelteComponentDev {
-    	constructor(options) {
-    		super(options);
-    		init(this, options, instance$3, create_fragment$3, safe_not_equal, {});
-
-    		dispatch_dev("SvelteRegisterComponent", {
-    			component: this,
-    			tagName: "Shop",
-    			options,
-    			id: create_fragment$3.name
-    		});
-    	}
-    }
 
     function cubicOut(t) {
         const f = t - 1.0;
@@ -1849,154 +2064,198 @@ var app = (function () {
     }
 
     /* src/screens/CartItem.svelte generated by Svelte v3.37.0 */
-    const file$2 = "src/screens/CartItem.svelte";
+    const file$5 = "src/screens/CartItem.svelte";
 
-    function create_fragment$2(ctx) {
-    	let div2;
-    	let img;
-    	let img_src_value;
-    	let t0;
-    	let div0;
+    // (37:4) {#if error}
+    function create_if_block$2(ctx) {
     	let p;
-    	let t1_value = /*item*/ ctx[0].product.name + "";
-    	let t1;
-    	let t2;
-    	let input;
-    	let input_min_value;
-    	let t3;
-    	let span0;
-    	let t4_value = /*item*/ ctx[0].product.units + "";
-    	let t4;
-    	let t5;
-    	let button0;
-    	let i0;
-    	let t6;
-    	let button1;
-    	let i1;
-    	let t7;
-    	let button1_hidden_value;
-    	let t8;
-    	let div1;
-    	let span2;
-    	let t9;
-    	let span1;
-    	let t10_value = Math.trunc(/*itemTotal*/ ctx[3]) + "";
-    	let t10;
-    	let t11;
-    	let span3;
-    	let t12_value = /*itemTotal*/ ctx[3].toString().split(".")[1] + "";
-    	let t12;
-    	let mounted;
-    	let dispose;
+    	let t;
 
     	const block = {
     		c: function create() {
-    			div2 = element("div");
-    			img = element("img");
+    			p = element("p");
+    			t = text(/*error*/ ctx[2]);
+    			attr_dev(p, "class", "bg-accent-200 px-2 py-1 my-1 text-accent-800");
+    			add_location(p, file$5, 37, 8, 1302);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, p, anchor);
+    			append_dev(p, t);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (dirty & /*error*/ 4) set_data_dev(t, /*error*/ ctx[2]);
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(p);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block$2.name,
+    		type: "if",
+    		source: "(37:4) {#if error}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$5(ctx) {
+    	let form;
+    	let t0;
+    	let img;
+    	let img_src_value;
+    	let t1;
+    	let div0;
+    	let p;
+    	let t2_value = /*item*/ ctx[0].product.name + "";
+    	let t2;
+    	let t3;
+    	let input;
+    	let input_min_value;
+    	let input_class_value;
+    	let t4;
+    	let span0;
+    	let t5_value = /*item*/ ctx[0].product.units + "";
+    	let t5;
+    	let t6;
+    	let button0;
+    	let i0;
+    	let t7;
+    	let button1;
+    	let i1;
+    	let t8;
+    	let button1_hidden_value;
+    	let t9;
+    	let div1;
+    	let span2;
+    	let t10;
+    	let span1;
+    	let t11_value = Math.trunc(/*itemTotal*/ ctx[3]) + "";
+    	let t11;
+    	let t12;
+    	let span3;
+    	let t13_value = /*itemTotal*/ ctx[3].toString().split(".")[1] + "";
+    	let t13;
+    	let mounted;
+    	let dispose;
+    	let if_block = /*error*/ ctx[2] && create_if_block$2(ctx);
+
+    	const block = {
+    		c: function create() {
+    			form = element("form");
+    			if (if_block) if_block.c();
     			t0 = space();
+    			img = element("img");
+    			t1 = space();
     			div0 = element("div");
     			p = element("p");
-    			t1 = text(t1_value);
-    			t2 = space();
-    			input = element("input");
+    			t2 = text(t2_value);
     			t3 = space();
+    			input = element("input");
+    			t4 = space();
     			span0 = element("span");
-    			t4 = text(t4_value);
-    			t5 = space();
+    			t5 = text(t5_value);
+    			t6 = space();
     			button0 = element("button");
     			i0 = element("i");
-    			t6 = space();
+    			t7 = space();
     			button1 = element("button");
     			i1 = element("i");
-    			t7 = text(" Update");
-    			t8 = space();
+    			t8 = text(" Update");
+    			t9 = space();
     			div1 = element("div");
     			span2 = element("span");
-    			t9 = text("₹");
+    			t10 = text("₹");
     			span1 = element("span");
-    			t10 = text(t10_value);
-    			t11 = space();
+    			t11 = text(t11_value);
+    			t12 = space();
     			span3 = element("span");
-    			t12 = text(t12_value);
+    			t13 = text(t13_value);
     			if (img.src !== (img_src_value = /*item*/ ctx[0].product.image_url)) attr_dev(img, "src", img_src_value);
     			attr_dev(img, "class", "inline-block w-12 h-12");
     			attr_dev(img, "alt", "");
-    			add_location(img, file$2, 16, 4, 513);
+    			add_location(img, file$5, 39, 4, 1384);
     			attr_dev(p, "class", "text-grey-700");
-    			add_location(p, file$2, 19, 8, 647);
+    			add_location(p, file$5, 42, 8, 1518);
     			attr_dev(input, "type", "number");
     			attr_dev(input, "min", input_min_value = /*item*/ ctx[0].product.moq);
-    			attr_dev(input, "class", "w-24 cart-input");
-    			add_location(input, file$2, 20, 8, 704);
+    			attr_dev(input, "class", input_class_value = "w-24 cart-input" + (/*error*/ ctx[2] ? "-err" : ""));
+    			add_location(input, file$5, 43, 8, 1575);
     			attr_dev(span0, "class", "text-sm text-grey-500");
-    			add_location(span0, file$2, 22, 8, 816);
+    			add_location(span0, file$5, 45, 8, 1708);
     			attr_dev(div0, "class", " inline-block w-52 align-middle");
-    			add_location(div0, file$2, 18, 4, 593);
+    			add_location(div0, file$5, 41, 4, 1464);
     			attr_dev(i0, "class", "far fa-trash-alt");
-    			add_location(i0, file$2, 25, 8, 956);
+    			add_location(i0, file$5, 48, 8, 1862);
+    			attr_dev(button0, "type", "button");
     			attr_dev(button0, "class", "btn-close");
-    			add_location(button0, file$2, 24, 4, 895);
+    			add_location(button0, file$5, 47, 4, 1787);
     			attr_dev(i1, "class", "fas fa-check-circle");
-    			add_location(i1, file$2, 30, 8, 1154);
-    			button1.hidden = button1_hidden_value = /*newQuantity*/ ctx[2] === /*item*/ ctx[0].quantity;
+    			add_location(i1, file$5, 52, 8, 2032);
+    			attr_dev(button1, "type", "submit");
+    			button1.hidden = button1_hidden_value = /*newQuantity*/ ctx[1] === /*item*/ ctx[0].quantity;
     			attr_dev(button1, "class", "absolute left-14 bottom-0.5 btn-p btn-m");
-    			add_location(button1, file$2, 29, 4, 1009);
+    			add_location(button1, file$5, 51, 4, 1914);
     			attr_dev(span1, "class", "text-grey-700");
-    			add_location(span1, file$2, 34, 61, 1306);
+    			add_location(span1, file$5, 56, 61, 2184);
     			attr_dev(span2, "class", "align-top text-xl text-grey-500");
-    			add_location(span2, file$2, 34, 8, 1253);
+    			add_location(span2, file$5, 56, 8, 2131);
     			attr_dev(span3, "class", "align-top text-sm text-grey-500");
-    			add_location(span3, file$2, 35, 8, 1380);
+    			add_location(span3, file$5, 57, 8, 2258);
     			attr_dev(div1, "class", "text-right");
-    			add_location(div1, file$2, 33, 4, 1220);
-    			attr_dev(div2, "class", "relative border-b border-grey-300 py-2 last:border-none");
-    			add_location(div2, file$2, 15, 0, 439);
+    			add_location(div1, file$5, 55, 4, 2098);
+    			attr_dev(form, "class", "relative border-b border-grey-300 py-2 last:border-none");
+    			add_location(form, file$5, 35, 0, 1149);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
-    			insert_dev(target, div2, anchor);
-    			append_dev(div2, img);
-    			append_dev(div2, t0);
-    			append_dev(div2, div0);
+    			insert_dev(target, form, anchor);
+    			if (if_block) if_block.m(form, null);
+    			append_dev(form, t0);
+    			append_dev(form, img);
+    			append_dev(form, t1);
+    			append_dev(form, div0);
     			append_dev(div0, p);
-    			append_dev(p, t1);
-    			append_dev(div0, t2);
-    			append_dev(div0, input);
-    			set_input_value(input, /*newQuantity*/ ctx[2]);
+    			append_dev(p, t2);
     			append_dev(div0, t3);
+    			append_dev(div0, input);
+    			set_input_value(input, /*newQuantity*/ ctx[1]);
+    			append_dev(div0, t4);
     			append_dev(div0, span0);
-    			append_dev(span0, t4);
-    			append_dev(div2, t5);
-    			append_dev(div2, button0);
+    			append_dev(span0, t5);
+    			append_dev(form, t6);
+    			append_dev(form, button0);
     			append_dev(button0, i0);
-    			append_dev(div2, t6);
-    			append_dev(div2, button1);
+    			append_dev(form, t7);
+    			append_dev(form, button1);
     			append_dev(button1, i1);
-    			append_dev(button1, t7);
-    			append_dev(div2, t8);
-    			append_dev(div2, div1);
+    			append_dev(button1, t8);
+    			append_dev(form, t9);
+    			append_dev(form, div1);
     			append_dev(div1, span2);
-    			append_dev(span2, t9);
+    			append_dev(span2, t10);
     			append_dev(span2, span1);
-    			append_dev(span1, t10);
-    			append_dev(div1, t11);
+    			append_dev(span1, t11);
+    			append_dev(div1, t12);
     			append_dev(div1, span3);
-    			append_dev(span3, t12);
+    			append_dev(span3, t13);
 
     			if (!mounted) {
     				dispose = [
-    					listen_dev(input, "input", /*input_input_handler*/ ctx[5]),
-    					listen_dev(button0, "click", /*removeFromCart*/ ctx[4], false, false, false),
+    					listen_dev(input, "input", /*input_input_handler*/ ctx[6]),
+    					listen_dev(button0, "click", /*removeFromCart*/ ctx[5], false, false, false),
     					listen_dev(
-    						button1,
-    						"click",
-    						function () {
-    							if (is_function(/*updateCart*/ ctx[1](/*item*/ ctx[0], /*newQuantity*/ ctx[2]))) /*updateCart*/ ctx[1](/*item*/ ctx[0], /*newQuantity*/ ctx[2]).apply(this, arguments);
-    						},
+    						form,
+    						"submit",
+    						prevent_default(function () {
+    							if (is_function(/*updateCart*/ ctx[4](/*item*/ ctx[0], /*newQuantity*/ ctx[1]))) /*updateCart*/ ctx[4](/*item*/ ctx[0], /*newQuantity*/ ctx[1]).apply(this, arguments);
+    						}),
     						false,
-    						false,
+    						true,
     						false
     					)
     				];
@@ -2007,33 +2266,51 @@ var app = (function () {
     		p: function update(new_ctx, [dirty]) {
     			ctx = new_ctx;
 
+    			if (/*error*/ ctx[2]) {
+    				if (if_block) {
+    					if_block.p(ctx, dirty);
+    				} else {
+    					if_block = create_if_block$2(ctx);
+    					if_block.c();
+    					if_block.m(form, t0);
+    				}
+    			} else if (if_block) {
+    				if_block.d(1);
+    				if_block = null;
+    			}
+
     			if (dirty & /*item*/ 1 && img.src !== (img_src_value = /*item*/ ctx[0].product.image_url)) {
     				attr_dev(img, "src", img_src_value);
     			}
 
-    			if (dirty & /*item*/ 1 && t1_value !== (t1_value = /*item*/ ctx[0].product.name + "")) set_data_dev(t1, t1_value);
+    			if (dirty & /*item*/ 1 && t2_value !== (t2_value = /*item*/ ctx[0].product.name + "")) set_data_dev(t2, t2_value);
 
     			if (dirty & /*item*/ 1 && input_min_value !== (input_min_value = /*item*/ ctx[0].product.moq)) {
     				attr_dev(input, "min", input_min_value);
     			}
 
-    			if (dirty & /*newQuantity*/ 4 && to_number(input.value) !== /*newQuantity*/ ctx[2]) {
-    				set_input_value(input, /*newQuantity*/ ctx[2]);
+    			if (dirty & /*error*/ 4 && input_class_value !== (input_class_value = "w-24 cart-input" + (/*error*/ ctx[2] ? "-err" : ""))) {
+    				attr_dev(input, "class", input_class_value);
     			}
 
-    			if (dirty & /*item*/ 1 && t4_value !== (t4_value = /*item*/ ctx[0].product.units + "")) set_data_dev(t4, t4_value);
+    			if (dirty & /*newQuantity*/ 2 && to_number(input.value) !== /*newQuantity*/ ctx[1]) {
+    				set_input_value(input, /*newQuantity*/ ctx[1]);
+    			}
 
-    			if (dirty & /*newQuantity, item*/ 5 && button1_hidden_value !== (button1_hidden_value = /*newQuantity*/ ctx[2] === /*item*/ ctx[0].quantity)) {
+    			if (dirty & /*item*/ 1 && t5_value !== (t5_value = /*item*/ ctx[0].product.units + "")) set_data_dev(t5, t5_value);
+
+    			if (dirty & /*newQuantity, item*/ 3 && button1_hidden_value !== (button1_hidden_value = /*newQuantity*/ ctx[1] === /*item*/ ctx[0].quantity)) {
     				prop_dev(button1, "hidden", button1_hidden_value);
     			}
 
-    			if (dirty & /*itemTotal*/ 8 && t10_value !== (t10_value = Math.trunc(/*itemTotal*/ ctx[3]) + "")) set_data_dev(t10, t10_value);
-    			if (dirty & /*itemTotal*/ 8 && t12_value !== (t12_value = /*itemTotal*/ ctx[3].toString().split(".")[1] + "")) set_data_dev(t12, t12_value);
+    			if (dirty & /*itemTotal*/ 8 && t11_value !== (t11_value = Math.trunc(/*itemTotal*/ ctx[3]) + "")) set_data_dev(t11, t11_value);
+    			if (dirty & /*itemTotal*/ 8 && t13_value !== (t13_value = /*itemTotal*/ ctx[3].toString().split(".")[1] + "")) set_data_dev(t13, t13_value);
     		},
     		i: noop,
     		o: noop,
     		d: function destroy(detaching) {
-    			if (detaching) detach_dev(div2);
+    			if (detaching) detach_dev(form);
+    			if (if_block) if_block.d();
     			mounted = false;
     			run_all(dispose);
     		}
@@ -2041,7 +2318,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$2.name,
+    		id: create_fragment$5.name,
     		type: "component",
     		source: "",
     		ctx
@@ -2050,23 +2327,48 @@ var app = (function () {
     	return block;
     }
 
-    function instance$2($$self, $$props, $$invalidate) {
+    function instance$5($$self, $$props, $$invalidate) {
     	let itemTotal;
     	let $cartItems;
     	validate_store(cartItems, "cartItems");
-    	component_subscribe($$self, cartItems, $$value => $$invalidate(6, $cartItems = $$value));
+    	component_subscribe($$self, cartItems, $$value => $$invalidate(7, $cartItems = $$value));
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots("CartItem", slots, []);
     	let { item } = $$props;
-    	let { updateCart } = $$props;
     	let newQuantity = item.quantity;
+    	let error = null;
+
+    	const updateCart = (data, n) => {
+    		if (n <= 0) {
+    			removeItem({ userId, itemId: data.id });
+    			set_store_value(cartItems, $cartItems = $cartItems.filter(i => i.id !== data.id), $cartItems);
+    		} else if (n < data.product.moq) {
+    			$$invalidate(2, error = `Minimum order quantity is ${data.product.moq}`);
+    		} else {
+    			$$invalidate(2, error = null);
+
+    			for (let i = 0; i < $cartItems.length; i++) {
+    				updateItem({
+    					userId,
+    					itemId: data.id,
+    					productId: data.product.id,
+    					n
+    				});
+
+    				if ($cartItems[i].product.id === data.product.id) {
+    					set_store_value(cartItems, $cartItems[i].quantity = n, $cartItems);
+    					cartItems.set($cartItems);
+    				}
+    			}
+    		}
+    	};
 
     	const removeFromCart = () => {
     		removeItem({ userId, itemId: item.id });
     		set_store_value(cartItems, $cartItems = $cartItems.filter(i => i.product.id !== item.product.id), $cartItems);
     	};
 
-    	const writable_props = ["item", "updateCart"];
+    	const writable_props = ["item"];
 
     	Object.keys($$props).forEach(key => {
     		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<CartItem> was created with unknown prop '${key}'`);
@@ -2074,20 +2376,21 @@ var app = (function () {
 
     	function input_input_handler() {
     		newQuantity = to_number(this.value);
-    		$$invalidate(2, newQuantity);
+    		$$invalidate(1, newQuantity);
     	}
 
     	$$self.$$set = $$props => {
     		if ("item" in $$props) $$invalidate(0, item = $$props.item);
-    		if ("updateCart" in $$props) $$invalidate(1, updateCart = $$props.updateCart);
     	};
 
     	$$self.$capture_state = () => ({
     		cartItems,
     		removeItem,
+    		updateItem,
     		item,
-    		updateCart,
     		newQuantity,
+    		error,
+    		updateCart,
     		removeFromCart,
     		$cartItems,
     		itemTotal
@@ -2095,8 +2398,8 @@ var app = (function () {
 
     	$$self.$inject_state = $$props => {
     		if ("item" in $$props) $$invalidate(0, item = $$props.item);
-    		if ("updateCart" in $$props) $$invalidate(1, updateCart = $$props.updateCart);
-    		if ("newQuantity" in $$props) $$invalidate(2, newQuantity = $$props.newQuantity);
+    		if ("newQuantity" in $$props) $$invalidate(1, newQuantity = $$props.newQuantity);
+    		if ("error" in $$props) $$invalidate(2, error = $$props.error);
     		if ("itemTotal" in $$props) $$invalidate(3, itemTotal = $$props.itemTotal);
     	};
 
@@ -2110,19 +2413,27 @@ var app = (function () {
     		}
     	};
 
-    	return [item, updateCart, newQuantity, itemTotal, removeFromCart, input_input_handler];
+    	return [
+    		item,
+    		newQuantity,
+    		error,
+    		itemTotal,
+    		updateCart,
+    		removeFromCart,
+    		input_input_handler
+    	];
     }
 
     class CartItem extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$2, create_fragment$2, safe_not_equal, { item: 0, updateCart: 1 });
+    		init(this, options, instance$5, create_fragment$5, safe_not_equal, { item: 0 });
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "CartItem",
     			options,
-    			id: create_fragment$2.name
+    			id: create_fragment$5.name
     		});
 
     		const { ctx } = this.$$;
@@ -2130,10 +2441,6 @@ var app = (function () {
 
     		if (/*item*/ ctx[0] === undefined && !("item" in props)) {
     			console.warn("<CartItem> was created without expected prop 'item'");
-    		}
-
-    		if (/*updateCart*/ ctx[1] === undefined && !("updateCart" in props)) {
-    			console.warn("<CartItem> was created without expected prop 'updateCart'");
     		}
     	}
 
@@ -2144,26 +2451,18 @@ var app = (function () {
     	set item(value) {
     		throw new Error("<CartItem>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
-
-    	get updateCart() {
-    		throw new Error("<CartItem>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
-
-    	set updateCart(value) {
-    		throw new Error("<CartItem>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
-    	}
     }
 
     /* src/screens/Cart.svelte generated by Svelte v3.37.0 */
-    const file$1 = "src/screens/Cart.svelte";
+    const file$4 = "src/screens/Cart.svelte";
 
-    function get_each_context(ctx, list, i) {
+    function get_each_context$1(ctx, list, i) {
     	const child_ctx = ctx.slice();
-    	child_ctx[5] = list[i];
+    	child_ctx[4] = list[i];
     	return child_ctx;
     }
 
-    // (39:4) {#if $cartItems.length}
+    // (22:4) {#if $cartItems.length}
     function create_if_block_2(ctx) {
     	let div;
     	let t_value = /*$cartItems*/ ctx[0].length + "";
@@ -2174,7 +2473,7 @@ var app = (function () {
     			div = element("div");
     			t = text(t_value);
     			attr_dev(div, "class", "bg-accent-500 w-5 h-5 rounded-xl absolute top-1 right-1 text-white text-sm");
-    			add_location(div, file$1, 39, 4, 1601);
+    			add_location(div, file$4, 22, 4, 1008);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
@@ -2192,15 +2491,15 @@ var app = (function () {
     		block,
     		id: create_if_block_2.name,
     		type: "if",
-    		source: "(39:4) {#if $cartItems.length}",
+    		source: "(22:4) {#if $cartItems.length}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (47:0) {#if showCart}
-    function create_if_block(ctx) {
+    // (30:0) {#if showCart}
+    function create_if_block$1(ctx) {
     	let div3;
     	let span0;
     	let t0;
@@ -2271,27 +2570,27 @@ var app = (function () {
     			i = element("i");
     			t10 = text("\n            Proceed To Checkout");
     			attr_dev(span0, "class", "h-fit cart-overlay");
-    			add_location(span0, file$1, 48, 4, 1872);
-    			add_location(h2, file$1, 50, 8, 2020);
+    			add_location(span0, file$4, 31, 4, 1279);
+    			add_location(h2, file$4, 33, 8, 1427);
     			attr_dev(div0, "class", "cart-list");
-    			add_location(div0, file$1, 52, 8, 2051);
+    			add_location(div0, file$4, 35, 8, 1458);
     			attr_dev(span1, "class", "font-bold text-grey-700");
-    			add_location(span1, file$1, 66, 66, 2525);
+    			add_location(span1, file$4, 49, 66, 1920);
     			attr_dev(span2, "class", "align-top text-2xl text-grey-500");
-    			add_location(span2, file$1, 66, 12, 2471);
+    			add_location(span2, file$4, 49, 12, 1866);
     			attr_dev(span3, "class", "align-top text-sm text-grey-500");
-    			add_location(span3, file$1, 67, 12, 2613);
+    			add_location(span3, file$4, 50, 12, 2008);
     			attr_dev(div1, "class", "text-right my-3");
-    			add_location(div1, file$1, 64, 8, 2411);
+    			add_location(div1, file$4, 47, 8, 1806);
     			attr_dev(i, "class", "fas fa-cash-register");
-    			add_location(i, file$1, 70, 12, 2844);
+    			add_location(i, file$4, 53, 12, 2239);
     			attr_dev(a, "href", "/api/checkout");
     			attr_dev(a, "class", "inline-block text-center text-lg btn-m btn-a w-full");
-    			add_location(a, file$1, 69, 8, 2747);
+    			add_location(a, file$4, 52, 8, 2142);
     			attr_dev(div2, "class", "h-fit w-80 bg-white border-l border-grey-200 p-5 shadow-md");
-    			add_location(div2, file$1, 49, 4, 1939);
+    			add_location(div2, file$4, 32, 4, 1346);
     			attr_dev(div3, "class", "fixed flex bottom-0 left-0 w-screen bg-white bg-opacity-50 z-30 md:z-40");
-    			add_location(div3, file$1, 47, 0, 1767);
+    			add_location(div3, file$4, 30, 0, 1174);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div3, anchor);
@@ -2319,7 +2618,7 @@ var app = (function () {
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen_dev(span0, "click", /*toggleCart*/ ctx[4], false, false, false);
+    				dispose = listen_dev(span0, "click", /*toggleCart*/ ctx[3], false, false, false);
     				mounted = true;
     			}
     		},
@@ -2384,16 +2683,16 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_if_block.name,
+    		id: create_if_block$1.name,
     		type: "if",
-    		source: "(47:0) {#if showCart}",
+    		source: "(30:0) {#if showCart}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (59:12) {:else}
+    // (42:12) {:else}
     function create_else_block(ctx) {
     	let p;
     	let p_transition;
@@ -2404,7 +2703,7 @@ var app = (function () {
     			p = element("p");
     			p.textContent = "Cart is empty";
     			attr_dev(p, "class", "text-grey-400 text-center text-sm");
-    			add_location(p, file$1, 59, 12, 2269);
+    			add_location(p, file$4, 42, 12, 1664);
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, p, anchor);
@@ -2436,14 +2735,14 @@ var app = (function () {
     		block,
     		id: create_else_block.name,
     		type: "else",
-    		source: "(59:12) {:else}",
+    		source: "(42:12) {:else}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (55:12) {#if $cartItems.length}
+    // (38:12) {#if $cartItems.length}
     function create_if_block_1(ctx) {
     	let each_blocks = [];
     	let each_1_lookup = new Map();
@@ -2451,13 +2750,13 @@ var app = (function () {
     	let current;
     	let each_value = /*$cartItems*/ ctx[0];
     	validate_each_argument(each_value);
-    	const get_key = ctx => /*item*/ ctx[5].product.id;
-    	validate_each_keys(ctx, each_value, get_each_context, get_key);
+    	const get_key = ctx => /*item*/ ctx[4].product.id;
+    	validate_each_keys(ctx, each_value, get_each_context$1, get_key);
 
     	for (let i = 0; i < each_value.length; i += 1) {
-    		let child_ctx = get_each_context(ctx, each_value, i);
+    		let child_ctx = get_each_context$1(ctx, each_value, i);
     		let key = get_key(child_ctx);
-    		each_1_lookup.set(key, each_blocks[i] = create_each_block(key, child_ctx));
+    		each_1_lookup.set(key, each_blocks[i] = create_each_block$1(key, child_ctx));
     	}
 
     	const block = {
@@ -2477,12 +2776,12 @@ var app = (function () {
     			current = true;
     		},
     		p: function update(ctx, dirty) {
-    			if (dirty & /*$cartItems, updateCart*/ 9) {
+    			if (dirty & /*$cartItems*/ 1) {
     				each_value = /*$cartItems*/ ctx[0];
     				validate_each_argument(each_value);
     				group_outros();
-    				validate_each_keys(ctx, each_value, get_each_context, get_key);
-    				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, each_1_anchor.parentNode, outro_and_destroy_block, create_each_block, each_1_anchor, get_each_context);
+    				validate_each_keys(ctx, each_value, get_each_context$1, get_key);
+    				each_blocks = update_keyed_each(each_blocks, dirty, get_key, 1, ctx, each_value, each_1_lookup, each_1_anchor.parentNode, outro_and_destroy_block, create_each_block$1, each_1_anchor, get_each_context$1);
     				check_outros();
     			}
     		},
@@ -2515,24 +2814,21 @@ var app = (function () {
     		block,
     		id: create_if_block_1.name,
     		type: "if",
-    		source: "(55:12) {#if $cartItems.length}",
+    		source: "(38:12) {#if $cartItems.length}",
     		ctx
     	});
 
     	return block;
     }
 
-    // (56:12) {#each $cartItems as item (item.product.id)}
-    function create_each_block(key_1, ctx) {
+    // (39:12) {#each $cartItems as item (item.product.id)}
+    function create_each_block$1(key_1, ctx) {
     	let first;
     	let cartitem;
     	let current;
 
     	cartitem = new CartItem({
-    			props: {
-    				item: /*item*/ ctx[5],
-    				updateCart: /*updateCart*/ ctx[3]
-    			},
+    			props: { item: /*item*/ ctx[4] },
     			$$inline: true
     		});
 
@@ -2552,7 +2848,7 @@ var app = (function () {
     		p: function update(new_ctx, dirty) {
     			ctx = new_ctx;
     			const cartitem_changes = {};
-    			if (dirty & /*$cartItems*/ 1) cartitem_changes.item = /*item*/ ctx[5];
+    			if (dirty & /*$cartItems*/ 1) cartitem_changes.item = /*item*/ ctx[4];
     			cartitem.$set(cartitem_changes);
     		},
     		i: function intro(local) {
@@ -2572,16 +2868,16 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_each_block.name,
+    		id: create_each_block$1.name,
     		type: "each",
-    		source: "(56:12) {#each $cartItems as item (item.product.id)}",
+    		source: "(39:12) {#each $cartItems as item (item.product.id)}",
     		ctx
     	});
 
     	return block;
     }
 
-    function create_fragment$1(ctx) {
+    function create_fragment$4(ctx) {
     	let button;
     	let svg;
     	let g;
@@ -2596,7 +2892,7 @@ var app = (function () {
     	let mounted;
     	let dispose;
     	let if_block0 = /*$cartItems*/ ctx[0].length && create_if_block_2(ctx);
-    	let if_block1 = /*showCart*/ ctx[1] && create_if_block(ctx);
+    	let if_block1 = /*showCart*/ ctx[1] && create_if_block$1(ctx);
 
     	const block = {
     		c: function create() {
@@ -2613,33 +2909,33 @@ var app = (function () {
     			if (if_block1) if_block1.c();
     			if_block1_anchor = empty();
     			attr_dev(path0, "d", "M.33 290.34l1.16.1 1.05 4.48h3.82");
-    			add_location(path0, file$1, 32, 10, 1320);
+    			add_location(path0, file$4, 15, 10, 727);
     			attr_dev(ellipse0, "cx", "1.99");
     			attr_dev(ellipse0, "cy", "295.56");
     			attr_dev(ellipse0, "rx", ".66");
     			attr_dev(ellipse0, "ry", ".65");
-    			add_location(ellipse0, file$1, 33, 10, 1376);
+    			add_location(ellipse0, file$4, 16, 10, 783);
     			attr_dev(ellipse1, "cy", "295.56");
     			attr_dev(ellipse1, "cx", "6.36");
     			attr_dev(ellipse1, "rx", ".66");
     			attr_dev(ellipse1, "ry", ".65");
-    			add_location(ellipse1, file$1, 34, 10, 1437);
+    			add_location(ellipse1, file$4, 17, 10, 844);
     			attr_dev(path1, "d", "M2.3 293.88h4.44l.7-2.4-5.84-.55");
-    			add_location(path1, file$1, 35, 10, 1498);
+    			add_location(path1, file$4, 18, 10, 905);
     			attr_dev(g, "transform", "translate(0 -289)");
     			attr_dev(g, "stroke", "#4f46e5");
     			attr_dev(g, "fill", "none");
     			attr_dev(g, "stroke-width", ".53");
     			attr_dev(g, "stroke-linecap", "round");
     			attr_dev(g, "stroke-linejoin", "round");
-    			add_location(g, file$1, 31, 8, 1181);
+    			add_location(g, file$4, 14, 8, 588);
     			attr_dev(svg, "xmlns", "http://www.w3.org/2000/svg");
     			attr_dev(svg, "viewBox", "0 0 7.94 7.94");
     			attr_dev(svg, "height", "30");
     			attr_dev(svg, "width", "30");
-    			add_location(svg, file$1, 30, 4, 1085);
+    			add_location(svg, file$4, 13, 4, 492);
     			attr_dev(button, "class", "btn-cart");
-    			add_location(button, file$1, 29, 0, 1033);
+    			add_location(button, file$4, 12, 0, 440);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
@@ -2660,7 +2956,7 @@ var app = (function () {
     			current = true;
 
     			if (!mounted) {
-    				dispose = listen_dev(button, "click", /*toggleCart*/ ctx[4], false, false, false);
+    				dispose = listen_dev(button, "click", /*toggleCart*/ ctx[3], false, false, false);
     				mounted = true;
     			}
     		},
@@ -2686,7 +2982,7 @@ var app = (function () {
     						transition_in(if_block1, 1);
     					}
     				} else {
-    					if_block1 = create_if_block(ctx);
+    					if_block1 = create_if_block$1(ctx);
     					if_block1.c();
     					transition_in(if_block1, 1);
     					if_block1.m(if_block1_anchor.parentNode, if_block1_anchor);
@@ -2723,7 +3019,7 @@ var app = (function () {
 
     	dispatch_dev("SvelteRegisterBlock", {
     		block,
-    		id: create_fragment$1.name,
+    		id: create_fragment$4.name,
     		type: "component",
     		source: "",
     		ctx
@@ -2732,7 +3028,7 @@ var app = (function () {
     	return block;
     }
 
-    function instance$1($$self, $$props, $$invalidate) {
+    function instance$4($$self, $$props, $$invalidate) {
     	let cartTotal;
     	let $cartItems;
     	validate_store(cartItems, "cartItems");
@@ -2740,23 +3036,6 @@ var app = (function () {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots("Cart", slots, []);
     	let showCart = false;
-
-    	const updateCart = (data, n) => {
-    		if (n <= 0) {
-    			removeItem({ userId, itemId: data.id });
-    			set_store_value(cartItems, $cartItems = $cartItems.filter(i => i.id !== data.id), $cartItems);
-    		} else if (n < data.product.moq) ; else {
-    			for (let i = 0; i < $cartItems.length; i++) {
-    				updateItem({ userId, itemId: data.id, n });
-
-    				if ($cartItems[i].product.id === data.product.id) {
-    					set_store_value(cartItems, $cartItems[i].quantity = n, $cartItems);
-    					cartItems.set($cartItems);
-    				}
-    			}
-    		}
-    	};
-
     	const toggleCart = () => $$invalidate(1, showCart = !showCart);
     	const writable_props = [];
 
@@ -2772,10 +3051,9 @@ var app = (function () {
     		updateItem,
     		removeItem,
     		showCart,
-    		updateCart,
     		toggleCart,
-    		$cartItems,
-    		cartTotal
+    		cartTotal,
+    		$cartItems
     	});
 
     	$$self.$inject_state = $$props => {
@@ -2795,20 +3073,902 @@ var app = (function () {
     		}
     	};
 
-    	return [$cartItems, showCart, cartTotal, updateCart, toggleCart];
+    	return [$cartItems, showCart, cartTotal, toggleCart];
     }
 
     class Cart extends SvelteComponentDev {
     	constructor(options) {
     		super(options);
-    		init(this, options, instance$1, create_fragment$1, safe_not_equal, {});
+    		init(this, options, instance$4, create_fragment$4, safe_not_equal, {});
 
     		dispatch_dev("SvelteRegisterComponent", {
     			component: this,
     			tagName: "Cart",
     			options,
+    			id: create_fragment$4.name
+    		});
+    	}
+    }
+
+    /* src/screens/ProductTile.svelte generated by Svelte v3.37.0 */
+    const file$3 = "src/screens/ProductTile.svelte";
+
+    function create_fragment$3(ctx) {
+    	let div2;
+    	let a;
+    	let div0;
+    	let t0;
+    	let h2;
+    	let t1_value = /*product*/ ctx[0].name + "";
+    	let t1;
+    	let t2;
+    	let div1;
+    	let span1;
+    	let t3;
+    	let span0;
+    	let t5;
+    	let span2;
+    	let a_href_value;
+    	let t7;
+    	let button;
+    	let i;
+    	let t8;
+    	let mounted;
+    	let dispose;
+
+    	const block = {
+    		c: function create() {
+    			div2 = element("div");
+    			a = element("a");
+    			div0 = element("div");
+    			t0 = space();
+    			h2 = element("h2");
+    			t1 = text(t1_value);
+    			t2 = space();
+    			div1 = element("div");
+    			span1 = element("span");
+    			t3 = text("₹");
+    			span0 = element("span");
+    			span0.textContent = `${/*price*/ ctx[2][0]}`;
+    			t5 = space();
+    			span2 = element("span");
+    			span2.textContent = `${/*price*/ ctx[2][1]}`;
+    			t7 = space();
+    			button = element("button");
+    			i = element("i");
+    			t8 = text(" Add To Cart");
+    			set_style(div0, "background-image", "url('" + /*product*/ ctx[0].image_url + "')");
+    			attr_dev(div0, "class", "bg-cover bg-center h-36 sm:h-60");
+    			add_location(div0, file$3, 9, 8, 267);
+    			attr_dev(h2, "class", "sm:text-lg text-grey-700");
+    			add_location(h2, file$3, 12, 8, 393);
+    			attr_dev(span0, "class", "font-bold text-grey-700");
+    			add_location(span0, file$3, 14, 66, 530);
+    			attr_dev(span1, "class", "align-top text-2xl text-grey-500");
+    			add_location(span1, file$3, 14, 12, 476);
+    			attr_dev(span2, "class", "align-top text-sm text-grey-500");
+    			add_location(span2, file$3, 15, 12, 605);
+    			add_location(div1, file$3, 13, 8, 458);
+    			attr_dev(a, "href", a_href_value = "/product/" + /*product*/ ctx[0].id);
+    			attr_dev(a, "class", "w-full focus:outline-none");
+    			add_location(a, file$3, 8, 4, 183);
+    			attr_dev(i, "class", "fas fa-cart-arrow-down");
+    			add_location(i, file$3, 20, 8, 827);
+    			attr_dev(button, "class", "text-sm btn-m btn-w w-full border border-info-300 hover:border-info-200");
+    			add_location(button, file$3, 19, 4, 698);
+    			attr_dev(div2, "class", "store-card");
+    			add_location(div2, file$3, 7, 0, 154);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div2, anchor);
+    			append_dev(div2, a);
+    			append_dev(a, div0);
+    			append_dev(a, t0);
+    			append_dev(a, h2);
+    			append_dev(h2, t1);
+    			append_dev(a, t2);
+    			append_dev(a, div1);
+    			append_dev(div1, span1);
+    			append_dev(span1, t3);
+    			append_dev(span1, span0);
+    			append_dev(div1, t5);
+    			append_dev(div1, span2);
+    			append_dev(div2, t7);
+    			append_dev(div2, button);
+    			append_dev(button, i);
+    			append_dev(button, t8);
+
+    			if (!mounted) {
+    				dispose = [
+    					action_destroyer(link.call(null, a)),
+    					listen_dev(
+    						button,
+    						"click",
+    						function () {
+    							if (is_function(/*addToCart*/ ctx[1](/*product*/ ctx[0]))) /*addToCart*/ ctx[1](/*product*/ ctx[0]).apply(this, arguments);
+    						},
+    						false,
+    						false,
+    						false
+    					)
+    				];
+
+    				mounted = true;
+    			}
+    		},
+    		p: function update(new_ctx, [dirty]) {
+    			ctx = new_ctx;
+
+    			if (dirty & /*product*/ 1) {
+    				set_style(div0, "background-image", "url('" + /*product*/ ctx[0].image_url + "')");
+    			}
+
+    			if (dirty & /*product*/ 1 && t1_value !== (t1_value = /*product*/ ctx[0].name + "")) set_data_dev(t1, t1_value);
+
+    			if (dirty & /*product*/ 1 && a_href_value !== (a_href_value = "/product/" + /*product*/ ctx[0].id)) {
+    				attr_dev(a, "href", a_href_value);
+    			}
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div2);
+    			mounted = false;
+    			run_all(dispose);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$3.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$3($$self, $$props, $$invalidate) {
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots("ProductTile", slots, []);
+    	let { product } = $$props;
+    	let price = product.price.split(".");
+    	let { addToCart } = $$props;
+    	const writable_props = ["product", "addToCart"];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<ProductTile> was created with unknown prop '${key}'`);
+    	});
+
+    	$$self.$$set = $$props => {
+    		if ("product" in $$props) $$invalidate(0, product = $$props.product);
+    		if ("addToCart" in $$props) $$invalidate(1, addToCart = $$props.addToCart);
+    	};
+
+    	$$self.$capture_state = () => ({ link, product, price, addToCart });
+
+    	$$self.$inject_state = $$props => {
+    		if ("product" in $$props) $$invalidate(0, product = $$props.product);
+    		if ("price" in $$props) $$invalidate(2, price = $$props.price);
+    		if ("addToCart" in $$props) $$invalidate(1, addToCart = $$props.addToCart);
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	return [product, addToCart, price];
+    }
+
+    class ProductTile extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$3, create_fragment$3, safe_not_equal, { product: 0, addToCart: 1 });
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "ProductTile",
+    			options,
+    			id: create_fragment$3.name
+    		});
+
+    		const { ctx } = this.$$;
+    		const props = options.props || {};
+
+    		if (/*product*/ ctx[0] === undefined && !("product" in props)) {
+    			console.warn("<ProductTile> was created without expected prop 'product'");
+    		}
+
+    		if (/*addToCart*/ ctx[1] === undefined && !("addToCart" in props)) {
+    			console.warn("<ProductTile> was created without expected prop 'addToCart'");
+    		}
+    	}
+
+    	get product() {
+    		throw new Error("<ProductTile>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set product(value) {
+    		throw new Error("<ProductTile>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	get addToCart() {
+    		throw new Error("<ProductTile>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set addToCart(value) {
+    		throw new Error("<ProductTile>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+    }
+
+    /* src/screens/Shop.svelte generated by Svelte v3.37.0 */
+    const file$2 = "src/screens/Shop.svelte";
+
+    function get_each_context(ctx, list, i) {
+    	const child_ctx = ctx.slice();
+    	child_ctx[5] = list[i];
+    	return child_ctx;
+    }
+
+    // (41:4) {#each $filteredProducts as product}
+    function create_each_block(ctx) {
+    	let producttile;
+    	let current;
+
+    	producttile = new ProductTile({
+    			props: {
+    				product: /*product*/ ctx[5],
+    				addToCart: /*addToCart*/ ctx[2]
+    			},
+    			$$inline: true
+    		});
+
+    	const block = {
+    		c: function create() {
+    			create_component(producttile.$$.fragment);
+    		},
+    		m: function mount(target, anchor) {
+    			mount_component(producttile, target, anchor);
+    			current = true;
+    		},
+    		p: function update(ctx, dirty) {
+    			const producttile_changes = {};
+    			if (dirty & /*$filteredProducts*/ 2) producttile_changes.product = /*product*/ ctx[5];
+    			producttile.$set(producttile_changes);
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+    			transition_in(producttile.$$.fragment, local);
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			transition_out(producttile.$$.fragment, local);
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			destroy_component(producttile, detaching);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_each_block.name,
+    		type: "each",
+    		source: "(41:4) {#each $filteredProducts as product}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$2(ctx) {
+    	let div0;
+    	let p;
+    	let t0;
+    	let i;
+    	let t1;
+    	let input;
+    	let t2;
+    	let div1;
+    	let current;
+    	let mounted;
+    	let dispose;
+    	let each_value = /*$filteredProducts*/ ctx[1];
+    	validate_each_argument(each_value);
+    	let each_blocks = [];
+
+    	for (let i = 0; i < each_value.length; i += 1) {
+    		each_blocks[i] = create_each_block(get_each_context(ctx, each_value, i));
+    	}
+
+    	const out = i => transition_out(each_blocks[i], 1, 1, () => {
+    		each_blocks[i] = null;
+    	});
+
+    	const block = {
+    		c: function create() {
+    			div0 = element("div");
+    			p = element("p");
+    			t0 = text("Filter Products ");
+    			i = element("i");
+    			t1 = space();
+    			input = element("input");
+    			t2 = space();
+    			div1 = element("div");
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].c();
+    			}
+
+    			attr_dev(i, "class", "fas fa-filter");
+    			add_location(i, file$2, 35, 42, 1089);
+    			attr_dev(p, "class", "text-white");
+    			add_location(p, file$2, 35, 4, 1051);
+    			attr_dev(input, "class", "w-48 rounded-sm focus:outline-none px-1");
+    			attr_dev(input, "type", "search");
+    			attr_dev(input, "placeholder", "Product");
+    			add_location(input, file$2, 36, 4, 1127);
+    			attr_dev(div0, "class", "fixed px-1 py-2 w-full bg-primary-600 shadow-md md:w-52 md:rounded-r-md md:top-1/4 text-center");
+    			add_location(div0, file$2, 34, 0, 938);
+    			attr_dev(div1, "class", "store-grid");
+    			add_location(div1, file$2, 39, 0, 1249);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div0, anchor);
+    			append_dev(div0, p);
+    			append_dev(p, t0);
+    			append_dev(p, i);
+    			append_dev(div0, t1);
+    			append_dev(div0, input);
+    			set_input_value(input, /*nameTerm*/ ctx[0]);
+    			insert_dev(target, t2, anchor);
+    			insert_dev(target, div1, anchor);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				each_blocks[i].m(div1, null);
+    			}
+
+    			current = true;
+
+    			if (!mounted) {
+    				dispose = listen_dev(input, "input", /*input_input_handler*/ ctx[3]);
+    				mounted = true;
+    			}
+    		},
+    		p: function update(ctx, [dirty]) {
+    			if (dirty & /*nameTerm*/ 1) {
+    				set_input_value(input, /*nameTerm*/ ctx[0]);
+    			}
+
+    			if (dirty & /*$filteredProducts, addToCart*/ 6) {
+    				each_value = /*$filteredProducts*/ ctx[1];
+    				validate_each_argument(each_value);
+    				let i;
+
+    				for (i = 0; i < each_value.length; i += 1) {
+    					const child_ctx = get_each_context(ctx, each_value, i);
+
+    					if (each_blocks[i]) {
+    						each_blocks[i].p(child_ctx, dirty);
+    						transition_in(each_blocks[i], 1);
+    					} else {
+    						each_blocks[i] = create_each_block(child_ctx);
+    						each_blocks[i].c();
+    						transition_in(each_blocks[i], 1);
+    						each_blocks[i].m(div1, null);
+    					}
+    				}
+
+    				group_outros();
+
+    				for (i = each_value.length; i < each_blocks.length; i += 1) {
+    					out(i);
+    				}
+
+    				check_outros();
+    			}
+    		},
+    		i: function intro(local) {
+    			if (current) return;
+
+    			for (let i = 0; i < each_value.length; i += 1) {
+    				transition_in(each_blocks[i]);
+    			}
+
+    			current = true;
+    		},
+    		o: function outro(local) {
+    			each_blocks = each_blocks.filter(Boolean);
+
+    			for (let i = 0; i < each_blocks.length; i += 1) {
+    				transition_out(each_blocks[i]);
+    			}
+
+    			current = false;
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div0);
+    			if (detaching) detach_dev(t2);
+    			if (detaching) detach_dev(div1);
+    			destroy_each(each_blocks, detaching);
+    			mounted = false;
+    			dispose();
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$2.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$2($$self, $$props, $$invalidate) {
+    	let $cartItems;
+    	let $filteredProducts;
+    	validate_store(cartItems, "cartItems");
+    	component_subscribe($$self, cartItems, $$value => $$invalidate(4, $cartItems = $$value));
+    	validate_store(filteredProducts, "filteredProducts");
+    	component_subscribe($$self, filteredProducts, $$value => $$invalidate(1, $filteredProducts = $$value));
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots("Shop", slots, []);
+    	onMount(fetchProducts);
+    	let nameTerm = "";
+
+    	const addToCart = async data => {
+    		let item = {};
+    		item.id = data.id;
+    		item.moq = data.moq;
+    		let iId = await addItem(item, 1);
+
+    		for (let i = 0; i < $cartItems.length; i++) {
+    			if ($cartItems[i].product.id === data.id) {
+    				set_store_value(cartItems, $cartItems[i].quantity++, $cartItems);
+    				cartItems.set($cartItems);
+    				return;
+    			}
+    		}
+
+    		let temp = {};
+    		temp.id = iId;
+    		temp.product = {};
+    		temp.product = data;
+    		temp.quantity = data.moq;
+    		cartItems.update(items => [...items, temp]);
+    	};
+
+    	const writable_props = [];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console.warn(`<Shop> was created with unknown prop '${key}'`);
+    	});
+
+    	function input_input_handler() {
+    		nameTerm = this.value;
+    		$$invalidate(0, nameTerm);
+    	}
+
+    	$$self.$capture_state = () => ({
+    		onMount,
+    		filteredProducts,
+    		nameF,
+    		cartItems,
+    		ProductTile,
+    		fetchProducts,
+    		addItem,
+    		nameTerm,
+    		addToCart,
+    		$cartItems,
+    		$filteredProducts
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ("nameTerm" in $$props) $$invalidate(0, nameTerm = $$props.nameTerm);
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	$$self.$$.update = () => {
+    		if ($$self.$$.dirty & /*nameTerm*/ 1) {
+    			nameF.set(nameTerm.toLocaleLowerCase());
+    		}
+    	};
+
+    	return [nameTerm, $filteredProducts, addToCart, input_input_handler];
+    }
+
+    class Shop extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$2, create_fragment$2, safe_not_equal, {});
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "Shop",
+    			options,
+    			id: create_fragment$2.name
+    		});
+    	}
+    }
+
+    /* src/screens/ProductPage.svelte generated by Svelte v3.37.0 */
+
+    const { console: console_1 } = globals;
+    const file$1 = "src/screens/ProductPage.svelte";
+
+    // (69:12) {#if error}
+    function create_if_block(ctx) {
+    	let p;
+    	let t;
+
+    	const block = {
+    		c: function create() {
+    			p = element("p");
+    			t = text(/*error*/ ctx[0]);
+    			attr_dev(p, "class", "bg-accent-200 px-2 py-1 my-1 text-accent-800");
+    			add_location(p, file$1, 69, 16, 2536);
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, p, anchor);
+    			append_dev(p, t);
+    		},
+    		p: function update(ctx, dirty) {
+    			if (dirty & /*error*/ 1) set_data_dev(t, /*error*/ ctx[0]);
+    		},
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(p);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_if_block.name,
+    		type: "if",
+    		source: "(69:12) {#if error}",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function create_fragment$1(ctx) {
+    	let div3;
+    	let p;
+    	let a0;
+    	let t1;
+    	let a1;
+    	let t3;
+    	let t4_value = /*$productDetail*/ ctx[1].name + "";
+    	let t4;
+    	let t5;
+    	let h1;
+    	let t6_value = /*$productDetail*/ ctx[1].name + "";
+    	let t6;
+    	let t7;
+    	let div1;
+    	let div0;
+    	let img;
+    	let img_src_value;
+    	let img_alt_value;
+    	let t8;
+    	let div2;
+    	let t9_value = /*$productDetail*/ ctx[1].description + "";
+    	let t9;
+    	let t10;
+    	let form;
+    	let input;
+    	let input_min_value;
+    	let input_value_value;
+    	let t11;
+    	let button;
+    	let i;
+    	let t12;
+    	let t13;
+    	let mounted;
+    	let dispose;
+    	let if_block = /*error*/ ctx[0] && create_if_block(ctx);
+
+    	const block = {
+    		c: function create() {
+    			div3 = element("div");
+    			p = element("p");
+    			a0 = element("a");
+    			a0.textContent = "Home";
+    			t1 = text(" /\n        ");
+    			a1 = element("a");
+    			a1.textContent = "Store";
+    			t3 = text(" /\n        ");
+    			t4 = text(t4_value);
+    			t5 = space();
+    			h1 = element("h1");
+    			t6 = text(t6_value);
+    			t7 = space();
+    			div1 = element("div");
+    			div0 = element("div");
+    			img = element("img");
+    			t8 = space();
+    			div2 = element("div");
+    			t9 = text(t9_value);
+    			t10 = space();
+    			form = element("form");
+    			input = element("input");
+    			t11 = space();
+    			button = element("button");
+    			i = element("i");
+    			t12 = text(" Add To Cart");
+    			t13 = space();
+    			if (if_block) if_block.c();
+    			attr_dev(a0, "class", "text-info-700");
+    			attr_dev(a0, "href", "/");
+    			add_location(a0, file$1, 50, 8, 1674);
+    			attr_dev(a1, "class", "text-info-700");
+    			attr_dev(a1, "href", "/");
+    			add_location(a1, file$1, 51, 8, 1727);
+    			attr_dev(p, "class", "text-grey-600 text-sm p-2");
+    			add_location(p, file$1, 49, 4, 1628);
+    			attr_dev(h1, "class", "text-2xl");
+    			add_location(h1, file$1, 54, 4, 1825);
+    			if (img.src !== (img_src_value = /*$productDetail*/ ctx[1].image_url)) attr_dev(img, "src", img_src_value);
+    			attr_dev(img, "alt", img_alt_value = /*$productDetail*/ ctx[1].name);
+    			add_location(img, file$1, 57, 12, 1965);
+    			attr_dev(div0, "id", "reel");
+    			add_location(div0, file$1, 56, 8, 1937);
+    			attr_dev(div1, "class", "inline-block w-full sm:w-96 align-top");
+    			add_location(div1, file$1, 55, 4, 1877);
+    			attr_dev(input, "class", "w-36 cart-input");
+    			attr_dev(input, "type", "number");
+    			attr_dev(input, "name", "addQty");
+    			attr_dev(input, "id", "addQty");
+    			attr_dev(input, "min", input_min_value = /*$productDetail*/ ctx[1].moq);
+    			input.value = input_value_value = /*$productDetail*/ ctx[1].moq;
+    			add_location(input, file$1, 63, 12, 2210);
+    			attr_dev(i, "class", "fas fa-cart-arrow-down");
+    			add_location(i, file$1, 66, 16, 2423);
+    			attr_dev(button, "class", "btn-p btn-m");
+    			attr_dev(button, "type", "submit");
+    			add_location(button, file$1, 65, 12, 2364);
+    			add_location(form, file$1, 62, 8, 2138);
+    			attr_dev(div2, "class", "inline-block p-3");
+    			add_location(div2, file$1, 60, 4, 2062);
+    			attr_dev(div3, "class", "min-h-fit");
+    			add_location(div3, file$1, 48, 0, 1600);
+    		},
+    		l: function claim(nodes) {
+    			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
+    		},
+    		m: function mount(target, anchor) {
+    			insert_dev(target, div3, anchor);
+    			append_dev(div3, p);
+    			append_dev(p, a0);
+    			append_dev(p, t1);
+    			append_dev(p, a1);
+    			append_dev(p, t3);
+    			append_dev(p, t4);
+    			append_dev(div3, t5);
+    			append_dev(div3, h1);
+    			append_dev(h1, t6);
+    			append_dev(div3, t7);
+    			append_dev(div3, div1);
+    			append_dev(div1, div0);
+    			append_dev(div0, img);
+    			append_dev(div3, t8);
+    			append_dev(div3, div2);
+    			append_dev(div2, t9);
+    			append_dev(div2, t10);
+    			append_dev(div2, form);
+    			append_dev(form, input);
+    			append_dev(form, t11);
+    			append_dev(form, button);
+    			append_dev(button, i);
+    			append_dev(button, t12);
+    			append_dev(form, t13);
+    			if (if_block) if_block.m(form, null);
+
+    			if (!mounted) {
+    				dispose = [
+    					action_destroyer(link.call(null, a1)),
+    					listen_dev(
+    						form,
+    						"submit",
+    						prevent_default(function () {
+    							if (is_function(/*addToCart*/ ctx[2](/*$productDetail*/ ctx[1]))) /*addToCart*/ ctx[2](/*$productDetail*/ ctx[1]).apply(this, arguments);
+    						}),
+    						false,
+    						true,
+    						false
+    					)
+    				];
+
+    				mounted = true;
+    			}
+    		},
+    		p: function update(new_ctx, [dirty]) {
+    			ctx = new_ctx;
+    			if (dirty & /*$productDetail*/ 2 && t4_value !== (t4_value = /*$productDetail*/ ctx[1].name + "")) set_data_dev(t4, t4_value);
+    			if (dirty & /*$productDetail*/ 2 && t6_value !== (t6_value = /*$productDetail*/ ctx[1].name + "")) set_data_dev(t6, t6_value);
+
+    			if (dirty & /*$productDetail*/ 2 && img.src !== (img_src_value = /*$productDetail*/ ctx[1].image_url)) {
+    				attr_dev(img, "src", img_src_value);
+    			}
+
+    			if (dirty & /*$productDetail*/ 2 && img_alt_value !== (img_alt_value = /*$productDetail*/ ctx[1].name)) {
+    				attr_dev(img, "alt", img_alt_value);
+    			}
+
+    			if (dirty & /*$productDetail*/ 2 && t9_value !== (t9_value = /*$productDetail*/ ctx[1].description + "")) set_data_dev(t9, t9_value);
+
+    			if (dirty & /*$productDetail*/ 2 && input_min_value !== (input_min_value = /*$productDetail*/ ctx[1].moq)) {
+    				attr_dev(input, "min", input_min_value);
+    			}
+
+    			if (dirty & /*$productDetail*/ 2 && input_value_value !== (input_value_value = /*$productDetail*/ ctx[1].moq)) {
+    				prop_dev(input, "value", input_value_value);
+    			}
+
+    			if (/*error*/ ctx[0]) {
+    				if (if_block) {
+    					if_block.p(ctx, dirty);
+    				} else {
+    					if_block = create_if_block(ctx);
+    					if_block.c();
+    					if_block.m(form, null);
+    				}
+    			} else if (if_block) {
+    				if_block.d(1);
+    				if_block = null;
+    			}
+    		},
+    		i: noop,
+    		o: noop,
+    		d: function destroy(detaching) {
+    			if (detaching) detach_dev(div3);
+    			if (if_block) if_block.d();
+    			mounted = false;
+    			run_all(dispose);
+    		}
+    	};
+
+    	dispatch_dev("SvelteRegisterBlock", {
+    		block,
+    		id: create_fragment$1.name,
+    		type: "component",
+    		source: "",
+    		ctx
+    	});
+
+    	return block;
+    }
+
+    function instance$1($$self, $$props, $$invalidate) {
+    	let $cartItems;
+    	let $productDetail;
+    	validate_store(cartItems, "cartItems");
+    	component_subscribe($$self, cartItems, $$value => $$invalidate(4, $cartItems = $$value));
+    	validate_store(productDetail, "productDetail");
+    	component_subscribe($$self, productDetail, $$value => $$invalidate(1, $productDetail = $$value));
+    	let { $$slots: slots = {}, $$scope } = $$props;
+    	validate_slots("ProductPage", slots, []);
+    	let { params } = $$props;
+    	let error = null;
+
+    	const addToCart = async data => {
+    		let addQty = document.getElementById("addQty").value;
+    		let item = {};
+    		item.id = data.id;
+    		item.moq = data.moq;
+    		let n = addQty && addQty > data.moq ? addQty : data.moq;
+    		console.log("addQty", addQty, "n", n, "data.moq", data.moq);
+
+    		if (!addQty || addQty < data.moq) {
+    			$$invalidate(0, error = `Minimum order quantity is ${data.moq}`);
+    			console.log("error", error);
+    			return;
+    		} else {
+    			$$invalidate(0, error = null);
+    			let iId = await addItem(item, n);
+
+    			for (let i = 0; i < $cartItems.length; i++) {
+    				if ($cartItems[i].product.id === data.id) {
+    					set_store_value(cartItems, $cartItems[i].quantity += n, $cartItems);
+    					cartItems.set($cartItems);
+    					return;
+    				}
+    			}
+
+    			let temp = {};
+    			temp.id = iId;
+    			temp.product = {};
+    			temp.product = data;
+    			temp.quantity = n;
+    			cartItems.update(items => [...items, temp]);
+    		}
+    	};
+
+    	const getProductDetail = async () => {
+    		isLoading.set(true);
+    		let product = await axios.get(`/api/fullproduct/${params.id}`).then(res => res.data);
+    		setProductDetails(product);
+    	};
+
+    	onMount(getProductDetail);
+    	const writable_props = ["params"];
+
+    	Object.keys($$props).forEach(key => {
+    		if (!~writable_props.indexOf(key) && key.slice(0, 2) !== "$$") console_1.warn(`<ProductPage> was created with unknown prop '${key}'`);
+    	});
+
+    	$$self.$$set = $$props => {
+    		if ("params" in $$props) $$invalidate(3, params = $$props.params);
+    	};
+
+    	$$self.$capture_state = () => ({
+    		onMount,
+    		link,
+    		isLoading,
+    		setProductDetails,
+    		productDetail,
+    		cartItems,
+    		productsList,
+    		addItem,
+    		params,
+    		error,
+    		addToCart,
+    		getProductDetail,
+    		$cartItems,
+    		$productDetail
+    	});
+
+    	$$self.$inject_state = $$props => {
+    		if ("params" in $$props) $$invalidate(3, params = $$props.params);
+    		if ("error" in $$props) $$invalidate(0, error = $$props.error);
+    	};
+
+    	if ($$props && "$$inject" in $$props) {
+    		$$self.$inject_state($$props.$$inject);
+    	}
+
+    	return [error, $productDetail, addToCart, params];
+    }
+
+    class ProductPage extends SvelteComponentDev {
+    	constructor(options) {
+    		super(options);
+    		init(this, options, instance$1, create_fragment$1, safe_not_equal, { params: 3 });
+
+    		dispatch_dev("SvelteRegisterComponent", {
+    			component: this,
+    			tagName: "ProductPage",
+    			options,
     			id: create_fragment$1.name
     		});
+
+    		const { ctx } = this.$$;
+    		const props = options.props || {};
+
+    		if (/*params*/ ctx[3] === undefined && !("params" in props)) {
+    			console_1.warn("<ProductPage> was created without expected prop 'params'");
+    		}
+    	}
+
+    	get params() {
+    		throw new Error("<ProductPage>: Props cannot be read directly from the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
+    	}
+
+    	set params(value) {
+    		throw new Error("<ProductPage>: Props cannot be set directly on the component instance unless compiling with 'accessors: true' or '<svelte:options accessors/>'");
     	}
     }
 
@@ -2817,28 +3977,35 @@ var app = (function () {
 
     function create_fragment(ctx) {
     	let div;
-    	let shop;
+    	let router;
     	let t;
     	let cart;
     	let current;
-    	shop = new Shop({ $$inline: true });
+
+    	router = new Router({
+    			props: {
+    				routes: { "/": Shop, "/product/:id": ProductPage }
+    			},
+    			$$inline: true
+    		});
+
     	cart = new Cart({ $$inline: true });
 
     	const block = {
     		c: function create() {
     			div = element("div");
-    			create_component(shop.$$.fragment);
+    			create_component(router.$$.fragment);
     			t = space();
     			create_component(cart.$$.fragment);
     			attr_dev(div, "class", "relative min-h-fit bg-grey-100");
-    			add_location(div, file, 10, 0, 251);
+    			add_location(div, file, 10, 0, 305);
     		},
     		l: function claim(nodes) {
     			throw new Error("options.hydrate only works if the component was compiled with the `hydratable: true` option");
     		},
     		m: function mount(target, anchor) {
     			insert_dev(target, div, anchor);
-    			mount_component(shop, div, null);
+    			mount_component(router, div, null);
     			append_dev(div, t);
     			mount_component(cart, div, null);
     			current = true;
@@ -2846,18 +4013,18 @@ var app = (function () {
     		p: noop,
     		i: function intro(local) {
     			if (current) return;
-    			transition_in(shop.$$.fragment, local);
+    			transition_in(router.$$.fragment, local);
     			transition_in(cart.$$.fragment, local);
     			current = true;
     		},
     		o: function outro(local) {
-    			transition_out(shop.$$.fragment, local);
+    			transition_out(router.$$.fragment, local);
     			transition_out(cart.$$.fragment, local);
     			current = false;
     		},
     		d: function destroy(detaching) {
     			if (detaching) detach_dev(div);
-    			destroy_component(shop);
+    			destroy_component(router);
     			destroy_component(cart);
     		}
     	};
@@ -2876,7 +4043,6 @@ var app = (function () {
     function instance($$self, $$props, $$invalidate) {
     	let { $$slots: slots = {}, $$scope } = $$props;
     	validate_slots("App", slots, []);
-    	onMount(fetchProducts);
     	onMount(fetchCart);
     	const writable_props = [];
 
@@ -2886,10 +4052,11 @@ var app = (function () {
 
     	$$self.$capture_state = () => ({
     		onMount,
-    		fetchProducts,
+    		Router,
     		fetchCart,
+    		Cart,
     		Shop,
-    		Cart
+    		ProductPage
     	});
 
     	return [];

@@ -1,14 +1,17 @@
 <script>
 	import { onMount } from 'svelte';
-    import { fetchProducts, fetchCart } from './service.js';
-	import Shop from './screens/Shop.svelte'
+	import Router from 'svelte-spa-router';
+    import { fetchCart } from './service.js';
 	import Cart from './screens/Cart.svelte'
+	import Shop from './screens/Shop.svelte'
+	import ProductPage from './screens/ProductPage.svelte'
 
-    onMount(fetchProducts)
     onMount(fetchCart)
 </script>
-
 <div class="relative min-h-fit bg-grey-100">
-	<Shop/>
+	<Router routes={{
+		'/': Shop,
+		'/product/:id': ProductPage,
+	}} />
 	<Cart/>
 </div>

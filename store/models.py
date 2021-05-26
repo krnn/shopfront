@@ -61,7 +61,7 @@ class Product(models.Model):
             FieldPanel('units'),
             FieldPanel('quantity_available'),
             FieldPanel('moq', heading='Minimum Order Quantity'),
-            FieldPanel('product_images'),
+            # ImageChooserPanel('product_images'),
         ]),
     ]
 

@@ -2,16 +2,23 @@ from rest_framework.serializers import ModelSerializer, ReadOnlyField
 from .models import *
 
 
-class ProductInfoSerializer(ModelSerializer):
+# class ProductImageSerializer(ModelSerializer):
+#     product_images = ProductImageSerializer(read_only=True)
+#     image_url = ReadOnlyField()
+
+#     class Meta:
+#         model = Product
+#         fields = "__all__"
+
+
+
+class ProductFullSerializer(ModelSerializer):
+    # product_images = ProductImageSerializer(read_only=True)
     image_url = ReadOnlyField()
 
     class Meta:
         model = Product
-        fields = (
-            "desctiption",
-            "images",
-            # "video"
-        )
+        fields = "__all__"
 
 
 class ProductSerializer(ModelSerializer):

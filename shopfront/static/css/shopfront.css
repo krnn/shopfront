@@ -28802,6 +28802,38 @@ video {
   color: rgba(49, 46, 129, var(--tw-text-opacity));
 }
 
+.cart-input-err {
+  --tw-bg-opacity: 1;
+  background-color: rgba(254, 215, 170, var(--tw-bg-opacity));
+  --tw-border-opacity: 1;
+  border-color: rgba(249, 115, 22, var(--tw-border-opacity));
+}
+
+.cart-input-err:focus {
+  --tw-border-opacity: 1;
+  border-color: rgba(129, 140, 248, var(--tw-border-opacity));
+}
+
+.cart-input-err {
+  border-top-left-radius: 0.125rem;
+  border-top-right-radius: 0.125rem;
+  border-bottom-width: 2px;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+}
+
+.cart-input-err:focus {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.cart-input-err {
+  padding-right: 0.25rem;
+  text-align: right;
+  --tw-text-opacity: 1;
+  color: rgba(234, 88, 12, var(--tw-text-opacity));
+}
+
 .h-fit {
   height: calc(100vh - 3.5rem);
 }

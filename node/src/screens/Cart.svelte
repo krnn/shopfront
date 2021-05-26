@@ -6,23 +6,6 @@
 
     let showCart = false;
 
-    const updateCart = (data, n) => {
-        if (n <= 0) {
-            removeItem({userId: userId, itemId: data.id})
-            $cartItems = $cartItems.filter(i => i.id !== data.id)
-        } else if (n < data.product.moq) {
-            
-        } else {
-            for (let i = 0; i < $cartItems.length; i++) {
-                updateItem({userId: userId, itemId: data.id, n: n});
-                if ($cartItems[i].product.id === data.product.id) {
-                    $cartItems[i].quantity = n;
-                    $cartItems = $cartItems
-                }
-            }
-        }
-    }
-
     const toggleCart = () => showCart = !showCart;
     $: cartTotal = $cartItems.length ? $cartItems.map(i => (i.quantity * i.product.price)).reduce((acc, cur) => acc + cur).toFixed(2) : 0
 </script>
@@ -54,7 +37,7 @@
     
             {#if $cartItems.length}
             {#each $cartItems as item (item.product.id)}
-            <CartItem {item} {updateCart}/>
+            <CartItem {item} />
             {/each}
             {:else}
             <p transition:fade class="text-grey-400 text-center text-sm">Cart is empty</p>

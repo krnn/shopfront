@@ -156,8 +156,12 @@ class ListProducts(generics.ListAPIView):
 #     queryset = Customer.objects.all()
 #     serializer_class = CartSerializer
 
-# @api_view(['GET'])
-# def getProductInfo(request, pk):
+@api_view(['GET'])
+def ProductInfo(request, pk):
+    product = Product.objects.get(id=pk)
+    serializer = ProductFullSerializer(product)
+    return Response(serializer.data)
+    
 
 @api_view(['GET'])
 def getCart(request, pk):
@@ -175,20 +179,20 @@ def addItem(request):
     productId = request.data["id"]
     # moq = request.data["moq"]
     addValue = request.data["n"]
+    if addValue > 0:
+        product = Product.objects.get(id=productId)
+        user = User.objects.get(id=userId)
+        
+        order, createdO = Order.objects.get_or_create(user=user, complete=False)
 
-    product = Product.objects.get(id=productId)
-    user = User.objects.get(id=userId)
-    
-    order, createdO = Order.objects.get_or_create(user=user, complete=False)
-
-    orderItem, createdI = OrderItem.objects.get_or_create(order=order, product=product)
-    if createdI:
-        if addValue > product.moq:
-            orderItem.quantity = addValue
+        orderItem, createdI = OrderItem.objects.get_or_create(order=order, product=product)
+        if createdI:
+            if addValue > product.moq:
+                orderItem.quantity = addValue
+            else:
+                orderItem.quantity = product.moq
         else:
-            orderItem.quantity = product.moq
-    else:
-        orderItem.quantity = orderItem.quantity + addValue
+            orderItem.quantity = orderItem.quantity + addValue
     
     orderItem.save()
 
@@ -200,11 +204,13 @@ def addItem(request):
 def updateItem(request):
     userId = request.data["userId"]
     itemId = request.data["itemId"]
+    productId = request.data["productId"]
     newValue = request.data["n"]
 
     orderItem = OrderItem.objects.get(id=itemId)
+    product = Product.objects.get(id=productId)
 
-    if orderItem.order.complete == False and int(userId) == orderItem.order.user.id:
+    if orderItem.order.complete == False and int(userId) == orderItem.order.user.id and newValue >= product.moq:
         orderItem.quantity = newValue
         orderItem.save()
         return JsonResponse({"quantity": orderItem.quantity})

@@ -12,7 +12,6 @@ if (lsCheck) {
 for (let i = 0; i < cartInput.length; i++) {
     cartInput[i].value = lsCartItems;
 }
-console.log(lsCartItems);
 
 function toggleAuthModal(isReg) {
     if(isReg === 'R') {

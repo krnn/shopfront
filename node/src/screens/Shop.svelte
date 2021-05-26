@@ -1,13 +1,10 @@
 <script>
+	import { onMount } from 'svelte';
     import { filteredProducts, nameF, cartItems } from '../stores.js';
 	import ProductTile from './ProductTile.svelte';
-	import ProductDetailModal from './ProductDetailModal.svelte';
-    import { addItem } from '../service.js';
-    
-    let selectedProduct = null
-    const setSelectedProduct = (prod) => {
-        selectedProduct = prod
-    }
+    import { fetchProducts, addItem } from '../service.js';
+
+    onMount(fetchProducts)
     let nameTerm = '';
 
     const addToCart = async(data) => {
@@ -33,19 +30,15 @@
 
     $: nameF.set(nameTerm.toLocaleLowerCase());
 </script>
+
     
 <div class="fixed px-1 py-2 w-full bg-primary-600 shadow-md md:w-52 md:rounded-r-md md:top-1/4 text-center">
     <p class="text-white">Filter Products <i class="fas fa-filter"></i></p>
     <input class="w-48 rounded-sm focus:outline-none px-1" type="search" bind:value={nameTerm} placeholder="Product">
-
 </div>
 
 <div class="store-grid">
     {#each $filteredProducts as product}
-        <ProductTile {product} {addToCart} {setSelectedProduct}/>
+        <ProductTile {product} {addToCart}/>
     {/each}
 </div>
-
-{#if selectedProduct}
-<ProductDetailModal product={selectedProduct} {setSelectedProduct}/>
-{/if}

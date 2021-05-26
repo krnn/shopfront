@@ -1,11 +1,16 @@
 import { writable, derived } from 'svelte/store';
 import {persistCart} from './persistCart'
 
-export const baseURL = 'http://localhost:8000/api/';
 
 export const isLoading = writable(false)
 
 export const productsList = writable([]);
+
+// Populate productsList store
+export const setFetchedProducts = (data) => {
+    productsList.set(data)
+	isLoading.set(false)
+}
 
 // Properties to filter by
 export const nameF = writable('')
@@ -16,19 +21,12 @@ export const filteredProducts = derived(
     ([$productlist, $nameF]) => $productlist.filter(p => p.name.toLowerCase().includes($nameF))
 )
 
-// Populate productsList store
-export const setFetchedProducts = (data) => {
-    productsList.set(data)
-	isLoading.set(false)
-}
-
 // Cart items
 export const cartItems = persistCart();
 
 // Populate cart if exists in database
 export const setFetchedCart = (data) => {
     cartItems.set(data)
-    console.log(data);
 }
 
 // // Add product to cartItems
@@ -46,3 +44,12 @@ export const setFetchedCart = (data) => {
 //     data.qty = data.moq
 //     cartItems.update(items => [...items, data])
 // }
+
+
+export const productDetail = writable({})
+
+// Populate productDetail store
+export const setProductDetails = (data) => {
+    productDetail.set(data)
+	isLoading.set(false)
+}

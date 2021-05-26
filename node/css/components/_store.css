@@ -24,3 +24,8 @@
 .cart-input {
     @apply text-lg text-primary-900 text-right focus:outline-none rounded-t-sm border-b-2 pr-1 bg-info-100 border-info-400 focus:border-primary-400;
 }
+
+
+.cart-input-err {
+    @apply text-lg text-accent-600 text-right focus:outline-none rounded-t-sm border-b-2 pr-1 bg-accent-200 border-accent-500 focus:border-primary-400;
+}
