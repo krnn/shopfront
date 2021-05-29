@@ -28834,6 +28834,40 @@ video {
   color: rgba(234, 88, 12, var(--tw-text-opacity));
 }
 
+.product-frame {
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.slider-size {
+  height: 18rem;
+  width: 18rem;
+}
+
+@media (min-width: 640px) {
+  .slider-size {
+    height: 24rem;
+    width: 24rem;
+  }
+}
+
+.slider-thumb {
+  background-size: cover;
+  background-position: center;
+  --tw-bg-opacity: 1;
+  background-color: rgba(67, 56, 202, var(--tw-bg-opacity));
+  border-radius: 0.25rem;
+  display: block;
+  height: 2.5rem;
+  margin: 0.25rem;
+  width: 2.5rem;
+}
+
+#reel {
+  transition: all 150ms ease;
+}
+
 .h-fit {
   height: calc(100vh - 3.5rem);
 }

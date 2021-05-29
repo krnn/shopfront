@@ -1,7 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel
+from wagtail.core.fields import StreamField
+from wagtail.images.blocks import ImageChooserBlock
+from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel, StreamFieldPanel
 from wagtail.images.edit_handlers import ImageChooserPanel
 
 
@@ -44,11 +46,25 @@ class Product(models.Model):
     units               = models.CharField(max_length=30)
     quantity_available  = models.IntegerField(default=0)
     moq                 = models.IntegerField(default=1)
+    images = StreamField([
+        ('image', ImageChooserBlock()),
+    ], null=True)
+
+    
 
     @property
     def image_url(self):
         return self.image.file.url
-    
+
+    @property
+    def image_urls(self):
+        img_list = []
+        for i in range(len(self.images)):
+            # img_list.append(self.images.__getitem__(i).block.name)
+            urlStr = str(self.images.__getitem__(i)).split('src=\"')[1].split('\"')[0]
+            img_list.append(urlStr)
+        return img_list
+        # return str(self.images.__getitem__(0).block.name)
 
     panels = [
         MultiFieldPanel([
@@ -61,12 +77,23 @@ class Product(models.Model):
             FieldPanel('units'),
             FieldPanel('quantity_available'),
             FieldPanel('moq', heading='Minimum Order Quantity'),
-            # ImageChooserPanel('product_images'),
+            StreamFieldPanel('images')
         ]),
     ]
 
     def __str__(self):
         return self.name
+
+    # def get_api_representation(self, value, context=None):
+    #     dict_list = []
+    #     for item in value["images"]:
+    #         temp_dict = {
+    #             'image_url': item.get("image").file.url
+    #             # any other relevant fields of your model...
+    #         }
+    #         dict_list.append(temp_dict)
+
+    #     return dict_list
 
 
 class ProductImage(models.Model):

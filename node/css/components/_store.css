@@ -29,3 +29,23 @@
 .cart-input-err {
     @apply text-lg text-accent-600 text-right focus:outline-none rounded-t-sm border-b-2 pr-1 bg-accent-200 border-accent-500 focus:border-primary-400;
 }
+
+.product-frame {
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.slider-size {
+    @apply w-72 h-72 sm:w-96 sm:h-96;
+}
+
+.slider-thumb {
+    background-size: cover;
+    background-position: center;
+    @apply block w-10 h-10 bg-primary-700 m-1 rounded;
+}
+
+#reel {
+    transition: all 150ms ease;
+}

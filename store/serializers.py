@@ -15,10 +15,22 @@ from .models import *
 class ProductFullSerializer(ModelSerializer):
     # product_images = ProductImageSerializer(read_only=True)
     image_url = ReadOnlyField()
+    image_urls = ReadOnlyField()
 
     class Meta:
         model = Product
-        fields = "__all__"
+        fields = (
+            "id",
+            "name",
+            # Add searchable properties here
+            "price",
+            "image_url",
+            "image_urls",
+            "description",
+            "units",
+            "moq",
+            "category",
+        )
 
 
 class ProductSerializer(ModelSerializer):
@@ -34,6 +46,7 @@ class ProductSerializer(ModelSerializer):
             "image_url",
             "units",
             "moq",
+            "category",
         )
 
 
