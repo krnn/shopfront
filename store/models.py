@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 
 from wagtail.core.fields import StreamField
+from wagtail.core.blocks import CharBlock
 from wagtail.images.blocks import ImageChooserBlock
 from wagtail.admin.edit_handlers import FieldPanel, MultiFieldPanel, StreamFieldPanel
 from wagtail.images.edit_handlers import ImageChooserPanel
@@ -41,6 +42,7 @@ class Product(models.Model):
     name                = models.CharField(max_length=100)
     description         = models.TextField(blank=True)
     price               = models.DecimalField(max_digits=8, decimal_places=2)
+    discount_price      = models.DecimalField(max_digits=8, decimal_places=2, blank=True, null=True)
     image               = models.ForeignKey("wagtailimages.Image",
         null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     units               = models.CharField(max_length=30)
@@ -48,9 +50,10 @@ class Product(models.Model):
     moq                 = models.IntegerField(default=1)
     images = StreamField([
         ('image', ImageChooserBlock()),
-    ], null=True)
-
-    
+    ], blank=True, null=True)
+    videos = StreamField([
+        ('video_URL', CharBlock(icon='media')),
+    ], blank=True, null=True)
 
     @property
     def image_url(self):
@@ -66,6 +69,15 @@ class Product(models.Model):
         return img_list
         # return str(self.images.__getitem__(0).block.name)
 
+    @property
+    def video_urls(self):
+        vid_list = []
+        for i in range(len(self.videos)):
+            # vid_list.append(self.images.__getitem__(i).block.name)
+            urlStr = str(self.videos.__getitem__(i)).split('watch?v=')[1]
+            vid_list.append(urlStr)
+        return vid_list
+
     panels = [
         MultiFieldPanel([
             FieldPanel('sku'),
@@ -73,11 +85,13 @@ class Product(models.Model):
             FieldPanel('name'),
             FieldPanel('description'),
             FieldPanel('price'),
+            FieldPanel('discount_price'),
             ImageChooserPanel('image'),
             FieldPanel('units'),
             FieldPanel('quantity_available'),
             FieldPanel('moq', heading='Minimum Order Quantity'),
-            StreamFieldPanel('images')
+            StreamFieldPanel('images'),
+            StreamFieldPanel('videos')
         ]),
     ]
 
@@ -135,7 +149,10 @@ class OrderItem(models.Model):
 
     @property
     def get_total(self):
-        total = self.product.price * self.quantity
+        if self.product.discount_price:
+            total = self.product.discount_price * self.quantity
+        else:
+            total = self.product.price * self.quantity
         return total
 
 

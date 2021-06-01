@@ -30,7 +30,7 @@
         removeItem({userId: userId, itemId: item.id})
         $cartItems = $cartItems.filter(i => i.product.id !== item.product.id)
     }
-    $: itemTotal = (item.product.price * item.quantity).toFixed(2)
+    $: itemTotal = ((item.product.discount_price ? item.product.discount_price : item.product.price) * item.quantity).toFixed(2).toString().split(".")
 </script>
 
 <form  on:submit|preventDefault={updateCart(item, newQuantity)} class="relative border-b border-grey-300 py-2 last:border-none">
@@ -54,8 +54,8 @@
     </button>
     
     <div class="text-right">
-        <span class="align-top text-xl text-grey-500">&#8377;<span class="text-grey-700">{Math.trunc(itemTotal)}</span></span>
-        <span class="align-top text-sm text-grey-500">{(itemTotal).toString().split(".")[1]}</span>
+        <span class="align-top text-xl text-grey-500">&#8377;<span class="text-grey-700">{itemTotal[0]}</span></span>
+        <span class="align-top text-sm text-grey-500">{itemTotal[1]}</span>
     </div>
 
 </form>

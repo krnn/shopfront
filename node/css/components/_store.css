@@ -43,7 +43,7 @@
 .slider-thumb {
     background-size: cover;
     background-position: center;
-    @apply block w-10 h-10 bg-primary-700 m-1 rounded;
+    @apply block w-10 h-10 bg-primary-600 text-white text-lg m-1 rounded;
 }
 
 #reel {

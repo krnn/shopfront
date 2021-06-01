@@ -1,5 +1,12 @@
 import {  isLoading, setFetchedProducts, setFetchedCart } from './stores.js';
 
+// Query 3rd party server for IP location
+export const getLocation = async () => {
+    data = await axios.get('https://ipinfo.io/json?token=31d38724631f1c')
+        .then(res => res.data.country)
+    setLocation(data)
+}
+
 // Get all products from database 
 export const fetchProducts = async () => {
     isLoading.set(true)

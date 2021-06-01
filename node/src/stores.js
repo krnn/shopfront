@@ -2,14 +2,24 @@ import { writable, derived } from 'svelte/store';
 import {persistCart} from './persistCart'
 
 
-export const isLoading = writable(false)
+export const isLoading = writable(true);
+
+export const userLocation = writable(null);
+
+// Set userLocation
+export const setLocation = (data) => {
+    productsList.set(data);
+}
 
 export const productsList = writable([]);
 
+export const hasLoadedProducts = writable(false);
+
 // Populate productsList store
 export const setFetchedProducts = (data) => {
-    productsList.set(data)
-	isLoading.set(false)
+    productsList.set(data);
+	isLoading.set(false);
+    hasLoadedProducts.set(true);
 }
 
 // Properties to filter by

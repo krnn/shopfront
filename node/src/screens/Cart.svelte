@@ -7,7 +7,7 @@
     let showCart = false;
 
     const toggleCart = () => showCart = !showCart;
-    $: cartTotal = $cartItems.length ? $cartItems.map(i => (i.quantity * i.product.price)).reduce((acc, cur) => acc + cur).toFixed(2) : 0
+    $: cartTotal = $cartItems.length ? $cartItems.map(i => (i.quantity * (i.product.discount_price ? i.product.discount_price : i.product.price))).reduce((acc, cur) => acc + cur).toFixed(2) : 0
 </script>
 
 <button class="btn-cart" on:click={toggleCart}>

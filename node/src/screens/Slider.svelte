@@ -1,6 +1,7 @@
 <script>
     export let cover;
     export let images;
+    export let videos;
     export let name;
 
     const currentSlide = (n) => {
@@ -22,6 +23,11 @@
             {#if images && images.length > 0}{#each images as url}
                 <div class="product-frame slider-size" style="background-image: url({url})" alt="{name}"></div>
             {/each}{/if}
+            
+            {#if videos && videos.length > 0}{#each videos as url}
+                <iframe class="product-video slider-size" src="https://www.youtube.com/embed/{url}" title="Product video for {name}" frameborder="0"
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope" allowfullscreen></iframe>
+            {/each}{/if}
         </div>
     </div>
 
@@ -30,6 +36,9 @@
         <button class="slider-thumb" on:click={() => currentSlide(0)} style="background-image: url({cover})"></button>
         {#each images as irl, i}
         <button class="slider-thumb" on:click={() => currentSlide(i+1)} style="background-image: url({irl})"></button>
+        {/each}
+        {#each videos as vrl, i}
+        <button class="slider-thumb" on:click={() => currentSlide(i+1 + images.length)}><i class="fas fa-film"></i></button>
         {/each}
     </div>
     {/if}

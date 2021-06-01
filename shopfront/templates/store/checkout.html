@@ -39,11 +39,11 @@
         {% if user.is_authenticated %}
         {% for item in items %}
         <div class="relative md:text-left tx0 border-b border-grey-300 py-2 last:border-none">
-            <div class="inline-block w-52 text-base align-middle md:w-5/6">
+            <div class="inline-block text-base align-middle md:w-5/6">
                 <img src="{{item.product.image_url}}" class="inline-block w-12 h-12" alt="{{item.product.name}}">
         
-                <p class="text-grey-600 md:inline-block md:w-5/12 md:ml-5 font-bold">{{item.product.name}}</p>
-                <p class="text-grey-800 md:inline-block md:w-5/12 md:ml-5">
+                <a href="/store/#/product/{{item.product.id}}" class="block text-grey-600 md:inline-block md:w-7/12 md:ml-5 font-bold align-middle">{{item.product.name}}</a>
+                <p class="text-grey-800 md:inline-block md:w-3/12 md:ml-5">
                     {{ item.product.price }} <span class="text-grey-500">&#10799</span> {{ item.quantity }}
                     <span class="text-sm text-grey-500">{{ item.product.units }}</span>
                 </p>

@@ -1,19 +1,26 @@
 <script>
 	import { link } from 'svelte-spa-router';
     export let product;
-    let price = product.price.split(".")
+    let price = product.discount_price ? product.discount_price.split(".") : product.price.split(".");
     export let addToCart;
 </script>
 
 <div class="store-card">
-    <a use:link href="/product/{product.id}" class="w-full focus:outline-none">
+    <a use:link href="/product/{product.id}" class="relative w-full focus:outline-none">
         <div style="background-image: url('{product.image_url}')"
-        class="bg-cover bg-center h-36 sm:h-60"></div>
+        class="bg-cover bg-center h-36 sm:h-60 rounded"></div>
     
-        <h2 class="sm:text-lg text-grey-700">{product.name}</h2>
-        <div>
-            <span class="align-top text-2xl text-grey-500">&#8377;<span class="font-bold text-grey-700">{price[0]}</span></span>
-            <span class="align-top text-sm text-grey-500">{price[1]}</span>
+        <h2 class="py-1 text-grey-700">{product.name}</h2>
+        <div class="absolute bg-white top-1 left-1 rounded-sm inline-block whitespace-nowrap shadow">
+            {#if product.discount_price}
+            <span class="inline-block py-1 px-2 rounded-l-sm text-sm font-bold bg-accent-500 text-white h-full">
+                { Math.round((product.price - product.discount_price)/product.price * 100) }% OFF
+            </span>
+            {/if}
+            <p class="inline-block px-2 pt-0.5">
+                <span class="align-top text-grey-500">&#8377; <span class="font-bold text-grey-700">{price[0]}</span></span>
+                <span class="align-top text-xs text-grey-500 -ml-0.5">{price[1]}</span>
+            </p>
         </div>
     </a>
 

@@ -16,7 +16,8 @@ class ProductFullSerializer(ModelSerializer):
     # product_images = ProductImageSerializer(read_only=True)
     image_url = ReadOnlyField()
     image_urls = ReadOnlyField()
-
+    video_urls = ReadOnlyField()
+    
     class Meta:
         model = Product
         fields = (
@@ -24,8 +25,10 @@ class ProductFullSerializer(ModelSerializer):
             "name",
             # Add searchable properties here
             "price",
+            "discount_price",
             "image_url",
             "image_urls",
+            "video_urls",
             "description",
             "units",
             "moq",
@@ -43,6 +46,7 @@ class ProductSerializer(ModelSerializer):
             "name",
             # Add searchable properties here
             "price",
+            "discount_price",
             "image_url",
             "units",
             "moq",
@@ -59,6 +63,7 @@ class CartProductSerializer(ModelSerializer):
             "id",
             "name",
             "price",
+            "discount_price",
             "image_url",
             "units",
             "moq",
