@@ -1,10 +1,19 @@
-import {  isLoading, setFetchedProducts, setFetchedCart } from './stores.js';
+import {  isLoading, setFetchedProducts, setFetchedCart, setLocation } from './stores.js';
 
 // Query 3rd party server for IP location
 export const getLocation = async () => {
-    data = await axios.get('https://ipinfo.io/json?token=31d38724631f1c')
-        .then(res => res.data.country)
-    setLocation(data)
+    let index = document.cookie.search('sf-l-c=')
+    if (index > -1) {
+        setLocation(document.cookie.slice(index+7,index+9));
+        } else {
+        try {
+            let data = await axios.get('https://ipinfo.io/json?token=31d38724631f1c')
+                .then(res => res.data.country)
+            setLocation(data)
+        } catch (_) {
+            setLocation('xx');
+        }
+    }
 }
 
 // Get all products from database 

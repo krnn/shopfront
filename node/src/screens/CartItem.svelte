@@ -1,5 +1,5 @@
 <script>
-    import { cartItems } from '../stores.js'
+    import { cartItems, userLocation } from '../stores.js'
     import { removeItem, updateItem } from '../service.js'
     export let item;
 
@@ -52,10 +52,11 @@
     <button type="submit" hidden={newQuantity === item.quantity} class="absolute left-14 bottom-0.5 btn-p btn-m">
         <i class="fas fa-check-circle"></i> Update
     </button>
-    
+    {#if $userLocation==='IN'}
     <div class="text-right">
         <span class="align-top text-xl text-grey-500">&#8377;<span class="text-grey-700">{itemTotal[0]}</span></span>
         <span class="align-top text-sm text-grey-500">{itemTotal[1]}</span>
     </div>
+    {/if}
 
 </form>

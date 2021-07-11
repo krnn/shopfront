@@ -1,8 +1,8 @@
 <script>
     import { fade, fly } from 'svelte/transition';
-    import { cartItems } from '../stores.js';
+	import { link } from 'svelte-spa-router';
+    import { cartItems, userLocation } from '../stores.js';
     import CartItem from './CartItem.svelte';
-    import { updateItem, removeItem } from '../service.js';
 
     let showCart = false;
 
@@ -45,6 +45,7 @@
             
         </div>
         
+        {#if $userLocation==='IN'}
         <div class="text-right my-3">
             Total
             <span class="align-top text-2xl text-grey-500">&#8377;<span class="font-bold text-grey-700">{Math.trunc(cartTotal)}</span></span>
@@ -54,6 +55,11 @@
             <i class="fas fa-cash-register"></i>
             Proceed To Checkout
         </a>
+        {:else}
+        <a use:link href="/checkout" on:click={showCart=false} class="inline-block text-center mt-5 text-lg btn-m btn-a w-full">
+            Proceed To Checkout
+        </a>
+        {/if}
     </div>
 </div>
 {/if}

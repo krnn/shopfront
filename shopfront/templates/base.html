@@ -102,7 +102,7 @@
         {% if messages %}
         <ul class="w-full">
             {% for message in messages %}
-            <li class="{% if message.tags %}bg-{{ message.tags }}-200 text-{{ message.tags }}-600{% endif %} text-center px-4 py-2">
+            <li class="{% if message.tags %}bg-{{ message.tags }}-200 text-{{ message.tags }}-600{% endif %} text-center px-4 py-2 notification">
                 {{ message }}
             </li>
             {% endfor %}

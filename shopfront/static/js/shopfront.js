@@ -1,5 +1,6 @@
 let showAuthModal = false;
 
+const hamburger = document.getElementById('hamburger')
 const authModal = document.getElementById('auth-modal');
 const authFormReel = document.getElementById('auth-form-reel');
 
@@ -14,6 +15,7 @@ for (let i = 0; i < cartInput.length; i++) {
 }
 
 function toggleAuthModal(isReg) {
+    hamburger.checked=false;
     if(isReg === 'R') {
         authFormReel.classList.remove("-ml-80")
         showAuthModal
@@ -24,7 +26,14 @@ function toggleAuthModal(isReg) {
     showAuthModal = !showAuthModal;
 }
 
-
+let notification = document.getElementsByClassName('notification')
+if (notification.length > 0) {
+    for (let i = 0; i < notification.length; i++) {
+        setTimeout(() => {
+            notification[i].style.display = "none";
+        }, 5000);
+    }
+}
 
 // let regForm = document.getElementById("reg-form");
 // let loginForm = document.getElementById("login-form");

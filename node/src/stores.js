@@ -8,7 +8,8 @@ export const userLocation = writable(null);
 
 // Set userLocation
 export const setLocation = (data) => {
-    productsList.set(data);
+    userLocation.set(data);
+    document.cookie = `sf-l-c=${data}`
 }
 
 export const productsList = writable([]);

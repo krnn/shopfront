@@ -21,3 +21,7 @@
 .btn-close {
     @apply absolute text-lg focus:outline-none text-grey-400 hover:text-accent-600;
 }
+
+.btn-local {
+    @apply text-center border border-grey-100 hover:border-info-300 hover:bg-info-50 rounded m-2 text-sm text-info-600;
+}

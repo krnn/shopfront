@@ -1,7 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { link } from 'svelte-spa-router';
-    import { isLoading, setProductDetails, productDetail, cartItems } from '../stores.js';
+    import { isLoading, userLocation, setProductDetails, productDetail, cartItems } from '../stores.js';
     import { addItem } from '../service.js';
     import Slider from './Slider.svelte';
     export let params;
@@ -74,7 +74,7 @@
     <div class="inline-block px-3 md:w-1/2 text-left">
         <h1 class="text-2xl">
             {$productDetail.name}
-            {#if $productDetail.discount_price}
+            {#if $userLocation === 'IN' && $productDetail.discount_price}
             <span class="inline-block px-1 text-lg rounded font-bold bg-accent-500 text-white h-full">
                 { Math.round(($productDetail.price - $productDetail.discount_price)/$productDetail.price * 100) }% OFF
             </span>
@@ -83,6 +83,7 @@
 
         {$productDetail.description}
         <form on:submit|preventDefault={addToCart($productDetail)} class="bg-white p-4 shadow-md text-center rounded">
+            {#if $userLocation === 'IN'}
             <div class="inline-block mr-4 align-bottom text-2xl">
                 <p class="text-grey-400 text-xs -mb-1">Unit Price</p>
                 <p class="inline-block {$productDetail.discount_price ? 'text-accent-500 opacity-60 line-through' : 'text-grey-500'}">
@@ -97,9 +98,10 @@
                     <span class="align-top -ml-1 text-sm text-grey-500">{String($productDetail.discount_price).split(".")[1]}</span>
                 {/if}
             </div>
+            {/if}
 
             <div class="inline-block mr-4 align-bottom">
-                <p class="text-grey-400 text-xs">Quantity</p>
+                <p class="text-grey-400 text-xs">Quantity (min. {$productDetail.moq} {$productDetail.units})</p>
                 <input class="w-24 cart-input" type="number" name="addQty" id="addQty"
                     min="{$productDetail.moq}" value={$productDetail.moq}><span 
                     class="text-info-600 border-b-2 bg-info-100 border-info-400 pb-1 pt-1.5 -ml-1 px-2">{$productDetail.units}</span>
@@ -111,6 +113,7 @@
                 <p class="bg-accent-200 px-2 py-1 my-1 text-accent-800">{error}</p>
             {/if}
         </form>
+        
     </div>
 
 </div>
